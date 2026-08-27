@@ -1,0 +1,12 @@
+[Unit]
+Description=Run STAIRS Momentum job after NSE close (Mon-Fri)
+
+[Timer]
+# 16:15 IST. If the server is on UTC, that's 10:45 UTC -> set accordingly.
+# This unit assumes server local time is IST. Verify with `timedatectl`.
+OnCalendar=Mon-Fri 16:15
+Persistent=true
+Unit=stairs-momentum.service
+
+[Install]
+WantedBy=timers.target

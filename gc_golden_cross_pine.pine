@@ -1,0 +1,124 @@
+// ============================================================================
+// NIFTY 50 — Research-Grade Golden Cross Multi-Wave Strategy Alert Script
+// Version: Pine Script v6
+// ============================================================================
+//
+// STRATEGY ARCHITECTURE:
+// 1. Macro Trend Filter: 50 SMA vs 200 SMA (Bull Regime vs Bear Regime)
+// 2. Intraday Momentum Impulse Trigger:
+//    - In Bull Regime (50 > 200): Triggers LONG on 15M Donchian Breakout / 20 EMA Cross
+//    - In Bear Regime (50 < 200): Triggers SHORT on 15M Breakdown / 20 EMA Cross
+// 3. Trade Frequency: 1 to 3 High-Conviction Trades per Day (~900 trades / 20 months)
+//
+// SETUP INSTRUCTIONS:
+// 1. Open TradingView → Chart for NSE:NIFTY (NIFTY 50 index)
+// 2. Set chart timeframe to 15 minutes
+// 3. Open Pine Script Editor → paste this script → Save & Add to Chart
+// 4. Set up Alerts:
+//      Condition:   "GC Multi-Wave Alert — NIFTY 50"
+//      Action:      Select "Any alert() function call"
+//      Webhook URL: https://<YOUR-VPS-IP>/api/gc_signal
+// 5. Replace REPLACE_WITH_YOUR_SECRET in inputs with your webhook secret
+// ============================================================================
+
+//@version=6
+indicator("GC Multi-Wave Alert — NIFTY 50", shorttitle="GC Multi-Wave", overlay=true, max_labels_count=500)
+
+// ── Inputs ──────────────────────────────────────────────────────────────────
+fast_len       = input.int(50, "Macro Fast SMA", minval=5, maxval=200, group="Macro Regime (50/200)")
+slow_len       = input.int(200, "Macro Slow SMA", minval=20, maxval=500, group="Macro Regime (50/200)")
+
+trigger_mode   = input.string("Multi-Wave Impulse (~1-3/day)", "Signal Mode", options=["Multi-Wave Impulse (~1-3/day)", "Pure 50/200 Crossover Only"], group="Signal Engine")
+breakout_bars  = input.int(20, "Breakout Lookback Bars", minval=5, maxval=50, group="Intraday Impulse Engine")
+fast_ema_len   = input.int(20, "Fast Momentum EMA", minval=5, maxval=50, group="Intraday Impulse Engine")
+
+show_smas      = input.bool(true, "Show SMA 50/200 Lines", group="Display")
+show_labels    = input.bool(true, "Show Signal Labels", group="Display")
+webhook_secret = input.string("REPLACE_WITH_YOUR_SECRET", "Webhook Secret", group="Webhook")
+
+// ── 1. Macro Regime Calculation ─────────────────────────────────────────────
+sma50  = ta.sma(close, fast_len)
+sma200 = ta.sma(close, slow_len)
+
+is_bull_regime = sma50 > sma200
+is_bear_regime = sma50 < sma200
+
+// ── 2. Intraday Momentum Impulse Trigger ────────────────────────────────────
+ema20 = ta.ema(close, fast_ema_len)
+roll_high = ta.highest(high[1], breakout_bars)
+roll_low  = ta.lowest(low[1], breakout_bars)
+
+// Impulse Breakout Conditions:
+impulse_long  = is_bull_regime and (close > roll_high) and (close > ema20) and (close[1] <= roll_high[1] or ta.crossover(close, ema20))
+impulse_short = is_bear_regime and (close < roll_low)  and (close < ema20) and (close[1] >= roll_low[1]  or ta.crossunder(close, ema20))
+
+// Pure Crossover Conditions (Fallback):
+pure_gc = ta.crossover(sma50, sma200)
+pure_dc = ta.crossunder(sma50, sma200)
+
+// Final Signal Selection:
+signal_long  = trigger_mode == "Multi-Wave Impulse (~1-3/day)" ? impulse_long  : pure_gc
+signal_short = trigger_mode == "Multi-Wave Impulse (~1-3/day)" ? impulse_short : pure_dc
+
+// ── 3. Plotting & Visuals ───────────────────────────────────────────────────
+plot(show_smas ? sma50 : na, "SMA 50", color=color.new(color.blue, 0), linewidth=2)
+plot(show_smas ? sma200 : na, "SMA 200", color=color.new(color.orange, 0), linewidth=2)
+plot(ema20, "EMA 20 Fast", color=color.new(color.purple, 30), linewidth=1)
+
+// Background color shows active Macro Regime:
+bgcolor(is_bull_regime ? color.new(color.green, 93) : color.new(color.red, 93))
+
+// Signal Labels
+if show_labels and signal_long
+    label.new(
+        bar_index, low, 
+        text="GC WAVE\nBUY CE", 
+        yloc=yloc.belowbar, 
+        style=label.style_label_up, 
+        color=color.green, 
+        textcolor=color.white,
+        size=size.small
+    )
+
+if show_labels and signal_short
+    label.new(
+        bar_index, high, 
+        text="GC WAVE\nBUY PE", 
+        yloc=yloc.abovebar, 
+        style=label.style_label_down, 
+        color=color.red, 
+        textcolor=color.white,
+        size=size.small
+    )
+
+// ── 4. Webhook Alerts ───────────────────────────────────────────────────────
+// Payload format matches bot API: {"signal":"LONG","action":"BUY","close":24500.50,"secret":"...","time":"..."}
+if signal_long
+    alert(
+        '{"signal":"LONG","action":"BUY","close":' + str.tostring(close, "#.##") + ',"secret":"' + webhook_secret + '","time":"' + str.tostring(time) + '"}',
+        alert.freq_once_per_bar_close
+    )
+
+if signal_short
+    alert(
+        '{"signal":"SHORT","action":"BUY","close":' + str.tostring(close, "#.##") + ',"secret":"' + webhook_secret + '","time":"' + str.tostring(time) + '"}',
+        alert.freq_once_per_bar_close
+    )
+
+// ── 5. Dashboard Table ──────────────────────────────────────────────────────
+var table info = table.new(position.bottom_right, 2, 5, bgcolor=color.new(color.black, 70), border_width=1)
+
+if barstate.islast
+    regime_text  = is_bull_regime ? "BULL REGIME (50 > 200)" : "BEAR REGIME (50 < 200)"
+    regime_color = is_bull_regime ? color.green : color.red
+    
+    table.cell(info, 0, 0, "Strategy", text_color=color.white)
+    table.cell(info, 1, 0, "GC Multi-Wave v6", text_color=color.aqua)
+    table.cell(info, 0, 1, "SMA 50", text_color=color.white)
+    table.cell(info, 1, 1, str.tostring(math.round(sma50, 2)), text_color=color.blue)
+    table.cell(info, 0, 2, "SMA 200", text_color=color.white)
+    table.cell(info, 1, 2, str.tostring(math.round(sma200, 2)), text_color=color.orange)
+    table.cell(info, 0, 3, "Regime", text_color=color.white)
+    table.cell(info, 1, 3, regime_text, text_color=regime_color)
+    table.cell(info, 0, 4, "Endpoint", text_color=color.white)
+    table.cell(info, 1, 4, "/api/gc_signal", text_color=color.yellow)

@@ -1,0 +1,16 @@
+[Unit]
+Description=STAIRS Momentum signal job (EOD basket generation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/stairs-web-app/stairs_momentum
+# Token + secrets: point these at however STAIRS already holds them.
+Environment=KITE_API_KEY=kitemcp
+# Environment=KITE_ACCESS_TOKEN=...      # better: write /opt/stairs-web-app/.kite_token daily
+# Environment=TELEGRAM_BOT_TOKEN=...     # to enable Telegram alerts
+ExecStart=/opt/stairs-web-app/.venv/bin/python /opt/stairs-web-app/stairs_momentum/momentum_job.py
+# 5-min timeout guard
+TimeoutStartSec=600

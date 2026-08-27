@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STAIRS Admin Panel</title>
+<style>
+  :root{--accent:#2b6cb0;--danger:#e53e3e;--success:#38a169;--warn:#d69e2e;--bg:#f7f9fc;--surface:#fff;--border:#e2e8f0;--text:#1a202c;--muted:#718096;--radius:10px}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text)}
+  header{background:var(--accent);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:12px}
+  header h1{font-size:18px}
+  header a{color:#fff;opacity:.8;text-decoration:none;margin-left:auto;font-size:13px}
+  .container{max-width:1200px;margin:0 auto;padding:24px}
+  .tabs{display:flex;gap:8px;margin-bottom:20px;border-bottom:2px solid var(--border);padding-bottom:0}
+  .tab{padding:10px 18px;cursor:pointer;border-radius:8px 8px 0 0;font-weight:600;font-size:13px;color:var(--muted);background:none;border:none}
+  .tab.active{color:var(--accent);background:var(--surface);border:2px solid var(--border);border-bottom:2px solid var(--surface);margin-bottom:-2px}
+  .panel{display:none;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:20px}
+  .panel.active{display:block}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+  .stat-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center}
+  .stat-card .val{font-size:28px;font-weight:700;color:var(--accent)}
+  .stat-card .lbl{font-size:12px;color:var(--muted);margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{background:var(--bg);padding:10px 12px;text-align:left;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;border-bottom:2px solid var(--border)}
+  td{padding:10px 12px;border-bottom:1px solid var(--border)}
+  tr:hover td{background:var(--bg)}
+  .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:600}
+  .badge-admin{background:#ebf8ff;color:#2b6cb0}
+  .badge-tier3{background:#f0fff4;color:#276749}
+  .badge-tier2{background:#fffbeb;color:#744210}
+  .badge-tier1{background:#fafafa;color:#4a5568}
+  .badge-active{background:#f0fff4;color:#276749}
+  .badge-inactive{background:#fff5f5;color:#c53030}
+  .badge-expired{background:#fff5f5;color:#c53030}
+  .badge-used{background:#edf2f7;color:#4a5568}
+  .btn{padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-danger{background:var(--danger);color:#fff}
+  .btn-success{background:var(--success);color:#fff}
+  .btn-warn{background:var(--warn);color:#fff}
+  .btn-sm{padding:4px 10px;font-size:11px}
+  .form-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:28px}
+  .form-group{display:flex;flex-direction:column;gap:4px;position:relative}
+  .form-group label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase}
+  .form-group select,.form-group input{padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff}
+  .form-group .hint{position:absolute;top:100%;left:0;margin-top:3px;font-size:10px;color:var(--muted);white-space:nowrap;text-transform:none;font-weight:400}
+  .invite-url{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:monospace;font-size:12px;word-break:break-all;margin-top:8px}
+  .copy-btn{background:var(--accent);color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;margin-top:6px}
+  img.avatar{width:28px;height:28px;border-radius:50%;object-fit:cover}
+  .search-box{padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:240px}
+  .toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 STAIRS Admin Panel</h1>
+  <span style="opacity:.6;font-size:13px">User Management</span>
+  <a href="/dashboard">← Back to App</a>
+  <a href="/logout" style="margin-left:12px">Logout</a>
+</header>
+<div class="container">
+  <div id="stats-grid" class="stats-grid"></div>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('users')">👥 Users</button>
+    <button class="tab" onclick="showTab('invites')">🔗 Invite Codes</button>
+    <button class="tab" onclick="showTab('audit')">📋 Audit Log</button>
+  </div>
+  <!-- USERS PANEL -->
+  <div id="tab-users" class="panel active">
+    <div class="toolbar">
+      <input class="search-box" id="user-search" placeholder="Search by name or email..." oninput="filterUsers()"/>
+      <span id="user-count" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <table id="users-table">
+      <thead><tr>
+        <th></th><th>Name</th><th>Email</th><th>Tier</th>
+        <th>Status</th><th>Joined</th><th>Last Login</th><th>Telegram Chat ID</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="users-tbody"></tbody>
+    </table>
+  </div>
+  <!-- INVITES PANEL -->
+  <div id="tab-invites" class="panel">
+    <div class="form-row" style="margin-bottom:28px;padding:16px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)">
+      <div class="form-group">
+        <label>Tier Access</label>
+        <select id="inv-tier">
+          <option value="tier1">Basic (Tier 1)</option>
+          <option value="tier2">Standard (Tier 2)</option>
+          <option value="tier3" selected>Premium (Tier 3)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Label (optional)</label>
+        <input id="inv-label" placeholder="e.g. John Smith" style="width:180px"/>
+      </div>
+      <div class="form-group">
+        <label>Expires (days)</label>
+        <input id="inv-expires" type="number" min="1" max="3650" placeholder="never" style="width:100px"/>
+        <span class="hint">blank = never expires</span>
+      </div>
+      <div class="form-group">
+        <label>Max Uses</label>
+        <input id="inv-maxuses" type="number" value="1" min="1" placeholder="1" style="width:70px"/>
+      </div>
+      <button class="btn btn-success" id="gen-invite-btn" onclick="createInvite()">+ Generate Invite Link</button>
+    </div>
+    <div id="invite-result" style="display:none;margin-bottom:16px;padding:14px;background:#f0fff4;border:1px solid #c6f6d5;border-radius:var(--radius)">
+      <div style="font-weight:600;color:var(--success);margin-bottom:6px">✅ Invite link created!</div>
+      <div class="invite-url" id="invite-url-display"></div>
+      <button class="copy-btn" onclick="copyInvite()">📋 Copy Link</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Code</th><th>Tier</th><th>Label</th><th>Uses</th>
+        <th>Created</th><th>Expires</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody id="invites-tbody"></tbody>
+    </table>
+  </div>
+  <!-- AUDIT PANEL -->
+  <div id="tab-audit" class="panel">
+    <table>
+      <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th><th>IP</th></tr></thead>
+      <tbody id="audit-tbody"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+const TIER_NAMES = {admin:'Administrator',tier3:'Premium',tier2:'Standard',tier1:'Basic'};
+const TIER_BADGE = {admin:'badge-admin',tier3:'badge-tier3',tier2:'badge-tier2',tier1:'badge-tier1'};
+let allUsers = [];
+
+// XSS prevention
+function sanitize(str){
+  if(str===null||str===undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function showTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', ['users','invites','audit'][i]===name));
+  document.querySelectorAll('.panel').forEach((p,i)=>p.classList.toggle('active', ['tab-users','tab-invites','tab-audit'][i]==='tab-'+name));
+  if(name==='users') loadUsers();
+  if(name==='invites') loadInvites();
+  if(name==='audit') loadAudit();
+}
+
+async function loadStats(){
+  try{
+    const r = await fetch('/api/admin/stats'); if(!r.ok) return;
+    const d = await r.json();
+    document.getElementById('stats-grid').innerHTML =
+      stat('Total Users', d.total_users) + stat('Active Users', d.active_users) +
+      (d.by_tier||[]).map(t=>stat(TIER_NAMES[t.tier]||t.tier, t.cnt)).join('');
+  }catch(e){ console.error(e); }
+}
+function stat(lbl,val){ return `<div class="stat-card"><div class="val">${sanitize(val)}</div><div class="lbl">${sanitize(lbl)}</div></div>`; }
+
+async function loadUsers(){
+  try{
+    const r = await fetch('/api/admin/users'); if(!r.ok) throw new Error('Failed to load users');
+    const d = await r.json(); allUsers = d.users || [];
+    renderUsers(allUsers);
+    document.getElementById('user-count').textContent = `${allUsers.length} users`;
+  }catch(e){ alert(e.message); }
+}
+
+function renderUsers(users){
+  document.getElementById('users-tbody').innerHTML = users.map(u => `<tr>
+    <td>${u.picture?`<img class="avatar" src="${sanitize(u.picture)}"/>`:'👤'}</td>
+    <td><b>${sanitize(u.name)}</b></td>
+    <td style="color:var(--muted)">${sanitize(u.email)}</td>
+    <td><span class="badge ${TIER_BADGE[u.tier]||''}">${sanitize(TIER_NAMES[u.tier]||u.tier)}</span></td>
+    <td><span class="badge ${u.is_active?'badge-active':'badge-inactive'}">${u.is_active?'Active':'Inactive'}</span></td>
+    <td style="color:var(--muted);font-size:11px">${sanitize((u.created_at||'').slice(0,10))}</td>
+    <td style="color:var(--muted);font-size:11px">${sanitize((u.last_login||'Never').slice(0,10))}</td>
+    <td><input value="${sanitize(u.telegram_chat_id||'')}" placeholder="chat id" title="Save with Enter or on blur"
+        style="width:110px;font-size:11px;padding:4px 6px;border-radius:4px;border:1px solid var(--border)"
+        onchange="updateTelegram(${u.id}, this.value, this)"/></td>
+    <td>
+      <select style="font-size:11px;padding:3px;border-radius:4px;border:1px solid var(--border)" onchange="updateTier(${u.id},this.value)">
+        ${['tier1','tier2','tier3','admin'].map(t=>`<option value="${t}"${u.tier===t?' selected':''}>${TIER_NAMES[t]}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm ${u.is_active?'btn-warn':'btn-success'}" style="margin-left:6px"
+        onclick="toggleUser(${u.id},${u.is_active})">${u.is_active?'Deactivate':'Activate'}</button>
+      <button class="btn btn-sm btn-danger" style="margin-left:6px" onclick="deleteUser(${u.id})">🗑 Delete</button>
+    </td>
+  </tr>`).join('');
+}
+
+function filterUsers(){
+  const q = document.getElementById('user-search').value.toLowerCase();
+  renderUsers(allUsers.filter(u => (u.name && u.name.toLowerCase().includes(q)) || (u.email && u.email.toLowerCase().includes(q))));
+}
+
+async function updateTier(userId, tier){
+  try{
+    const r = await fetch(`/api/admin/users/${userId}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier})});
+    if(!r.ok) throw new Error('Tier update failed');
+    loadUsers(); loadStats();
+  }catch(e){ alert(e.message); }
+}
+
+async function updateTelegram(userId, chatId, el){
+  const prev = el ? el.style.borderColor : '';
+  try{
+    const r = await fetch(`/api/admin/users/${userId}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegram_chat_id:(chatId||'').trim()})});
+    if(!r.ok) throw new Error('Failed to save Telegram Chat ID');
+    if(el){ el.style.borderColor='#38a169'; setTimeout(function(){ el.style.borderColor=prev; }, 1200); }
+  }catch(e){ if(el) el.style.borderColor='#e53e3e'; alert(e.message); }
+}
+
+async function toggleUser(userId, isActive){
+  if(isActive && !confirm('Deactivate this user? They will lose access immediately.')) return;
+  try{
+    const r = await fetch(`/api/admin/users/${userId}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:isActive?0:1})});
+    if(!r.ok) throw new Error('Status update failed');
+    loadUsers(); loadStats();
+  }catch(e){ alert(e.message); }
+}
+
+async function deleteUser(userId){
+  const u = allUsers.find(x=>x.id===userId);
+  const who = u ? (u.name || u.email || ('user '+userId)) : ('user '+userId);
+  if(!confirm('Permanently DELETE ' + who + '?\n\nThis removes their account for good. They can only return via a new invite, and this cannot be undone.\n\n(Tip: use Deactivate instead if you just want to block access.)')) return;
+  try{
+    const r = await fetch(`/api/admin/users/${userId}`, {method:'DELETE'});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error || 'Delete failed');
+    loadUsers(); loadStats();
+  }catch(e){ alert(e.message); }
+}
+
+function inviteStatus(c){
+  if(c.use_count >= c.max_uses) return '<span class="badge badge-used">Used up</span>';
+  if(c.expires_at){
+    const exp = new Date(c.expires_at.replace('Z','+00:00'));
+    if(!isNaN(exp) && exp < new Date()) return '<span class="badge badge-expired">Expired</span>';
+  }
+  return '<span class="badge badge-active">Active</span>';
+}
+
+async function loadInvites(){
+  try{
+    const r = await fetch('/api/admin/invite_codes'); if(!r.ok) return;
+    const d = await r.json();
+    document.getElementById('invites-tbody').innerHTML = (d.codes||[]).map(c=>`<tr>
+      <td><code style="font-size:11px">${sanitize(c.code)}</code></td>
+      <td><span class="badge ${TIER_BADGE[c.tier]||''}">${sanitize(TIER_NAMES[c.tier]||c.tier)}</span></td>
+      <td>${sanitize(c.label||'—')}</td>
+      <td>${c.use_count}/${c.max_uses}</td>
+      <td style="font-size:11px;color:var(--muted)">${sanitize((c.created_at||'').slice(0,10))}</td>
+      <td style="font-size:11px;color:var(--muted)">${c.expires_at ? sanitize(c.expires_at.slice(0,10)) : 'Never'}</td>
+      <td>${inviteStatus(c)}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteInvite(${c.id})">Revoke</button></td>
+    </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">No invite links created yet</td></tr>';
+  }catch(e){ console.error(e); }
+}
+
+let lastInviteUrl = '';
+async function createInvite(){
+  const btn = document.getElementById('gen-invite-btn');
+  btn.disabled = true; btn.textContent = 'Generating...';
+  try{
+    const tier = document.getElementById('inv-tier').value;
+    const label = document.getElementById('inv-label').value;
+    const rawExpires = document.getElementById('inv-expires').value.trim();
+    const expires_days = rawExpires === '' ? null : Math.max(1, parseInt(rawExpires, 10)); // blank = never
+    const rawMax = document.getElementById('inv-maxuses').value.trim();
+    const max_uses = rawMax === '' ? 1 : Math.max(1, parseInt(rawMax, 10));
+    const r = await fetch('/api/admin/invite_codes', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier, label, expires_days, max_uses})});
+    if(!r.ok) throw new Error('Failed to create invite code');
+    const d = await r.json();
+    lastInviteUrl = d.invite_url;
+    document.getElementById('invite-url-display').textContent = d.invite_url;
+    document.getElementById('invite-result').style.display = 'block';
+    loadInvites();
+  }catch(e){ alert(e.message); }
+  finally{ btn.disabled = false; btn.textContent = '+ Generate Invite Link'; }
+}
+
+function copyInvite(){
+  navigator.clipboard.writeText(lastInviteUrl);
+  const b = document.querySelector('.copy-btn'); b.textContent = '✅ Copied!';
+  setTimeout(()=> b.textContent = '📋 Copy Link', 2000);
+}
+
+async function deleteInvite(id){
+  if(!confirm("Revoke this invite link? It can no longer be used to sign up.")) return;
+  try{
+    const r = await fetch(`/api/admin/invite_codes/${id}`, {method:'DELETE'});
+    if(!r.ok) throw new Error('Revocation failed');
+    loadInvites();
+  }catch(e){ alert(e.message); }
+}
+
+async function loadAudit(){
+  try{
+    const r = await fetch('/api/admin/audit_log?limit=100'); if(!r.ok) return;
+    const d = await r.json();
+    document.getElementById('audit-tbody').innerHTML = (d.logs||[]).map(l=>`<tr>
+      <td style="font-size:11px;color:var(--muted)">${sanitize((l.created_at||'').replace('T',' ').slice(0,19))}</td>
+      <td style="font-size:12px">${sanitize(l.email||'—')}</td>
+      <td><code style="font-size:11px">${sanitize(l.action)}</code></td>
+      <td style="font-size:11px;color:var(--muted)">${sanitize(l.details||'—')}</td>
+      <td style="font-size:11px;color:var(--muted)">${sanitize(l.ip||'—')}</td>
+    </tr>`).join('');
+  }catch(e){ console.error(e); }
+}
+
+loadStats();
+loadUsers();
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+flask>=3.0.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+kiteconnect>=4.2.0
+gunicorn>=23.0.0
