@@ -1173,7 +1173,7 @@ opt_ait_trades = []
 
 nifty_exp_trades = []
 
-# NIFTY EXP WORKSTATION — windowed weekly spread on workstation (ATR 2/2.7) direction
+# NIFTY EXP WORKSTATION — windowed weekly spread on workstation SuperTrend ATR 10/3 direction
 nexp_workstation_config = {
     "capital": 500000,
     "risk_factor": 0.12,
@@ -2271,6 +2271,25 @@ def api_telegram_test():
 
 @app.route("/api/zerodha/callback")
 def api_zerodha_callback():
+    # Shared Kite Redirect URL. STAIRS (React) sets stairs_zerodha_oauth=1 before
+    # opening Kite login; forward the unused request_token to FastAPI so STAIRS
+    # can exchange it and return to /stairs/. Without the cookie → this Flask app.
+    if request.cookies.get("stairs_zerodha_oauth") == "1":
+        target = "/api/broker/zerodha/callback"
+        if request.query_string:
+            target = f"{target}?{request.query_string.decode('utf-8', errors='ignore')}"
+        app.logger.info("Zerodha callback handoff → STAIRS FastAPI (%s)", target)
+        resp = redirect(target)
+        resp.set_cookie(
+            "stairs_zerodha_oauth",
+            "",
+            max_age=0,
+            path="/",
+            secure=True,
+            samesite="Lax",
+        )
+        return resp
+
     request_token = request.args.get("request_token")
     status = request.args.get("status")
     masked_api_key = f"{KITE_API_KEY[:4]}****" if KITE_API_KEY else "missing"
@@ -3438,8 +3457,8 @@ def api_tradingview_webhook():
         })
         refresh_master_state_from_db()
         log_automation(
-            f"TradingView signal {signal} @ {spot}",
-            details={"source": "TRADINGVIEW", "bar_time": bar_time, "symbol": payload.get("symbol") or payload.get("ticker"), "timeframe": payload.get("timeframe")}
+            f"TradingView signal {signal} @ {spot} ({models_v2.SIGNAL_SUPERTREND_LABEL})",
+            details={"source": "TRADINGVIEW", "bar_time": bar_time, "symbol": payload.get("symbol") or payload.get("ticker"), "timeframe": payload.get("timeframe"), "supertrend": models_v2.SIGNAL_SUPERTREND_LABEL}
         )
         # Everything above this line is local bookkeeping and is already
         # done: the signal is persisted and the dashboard will show it. What
@@ -4771,8 +4790,45 @@ def _execute_signal(item):
 
     try:
         import sys as _sys
-        models_v2.handle_main_signal(_sys.modules[__name__], signal, spot, str(bar_time))
-        log_automation("MODELS_V2 main signal dispatched", level="INFO")
+        _selfmod = _sys.modules[__name__]
+        if multi_tenant_enabled():
+            for _uid in active_trading_users():
+                try:
+                    models_v2.handle_main_signal(
+                        _UserScopedApp(_selfmod, _uid), signal, spot, str(bar_time)
+                    )
+                except Exception as _ue:
+                    log_automation(
+                        f"MODELS_V2 main signal ERROR for user {_uid}: {_ue}",
+                        level="ERROR",
+                    )
+            log_automation(
+                f"MODELS_V2 OB+AIT dispatched multi-tenant ({models_v2.SIGNAL_SUPERTREND_LABEL})",
+                level="INFO",
+            )
+        else:
+            models_v2.handle_main_signal(_selfmod, signal, spot, str(bar_time))
+            log_automation(
+                f"MODELS_V2 OB+AIT dispatched ({models_v2.SIGNAL_SUPERTREND_LABEL})",
+                level="INFO",
+            )
+        # Strategy instances that share the SuperTrend webhook
+        try:
+            for _st in get_strategies():
+                if _st.get("webhook") == "existing" and _st.get("mode", "off") != "off" \
+                   and _st.get("type") in ("ob_workstation", "ait_workstation", "nexp_workstation"):
+                    try:
+                        models_v2._process_model_signal(
+                            _StrategyScopedApp(_selfmod, _st),
+                            _st["type"], signal, spot, str(bar_time),
+                        )
+                    except Exception as _se:
+                        log_automation(
+                            f"strategy instance signal ERROR [{_st.get('id')}]: {_se}",
+                            level="ERROR",
+                        )
+        except Exception:
+            pass
     except Exception as e:
         log_automation("MODELS_V2 main signal ERROR: %s" % e, level="ERROR")
         failures.append("models_v2.handle_main_signal: %s" % e)
@@ -4964,16 +5020,20 @@ def api_sync_positions():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# WORKSTATION WEBHOOK CHANNEL — ATR 2 / 2.7 SuperTrend
-# Separate signal flow for OB/AIT Workstation pages only.
-# Does NOT touch live model trades (Futures, Options Buy live, Options AIT live, Nifty EXP).
+# WORKSTATION WEBHOOK — alias of the common SuperTrend ATR 10 / Mult 3.0 webhook
+# Prefer ONE TradingView alert → /api/tradingview/webhook (Futures + OB + AIT).
+# This URL stays for existing TV alerts; it enqueues the same unified signal queue.
+# Do not keep two TV alerts on both URLs — use one to avoid duplicate flips.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/api/tradingview/workstation_webhook", methods=["POST"])
 def api_tradingview_workstation_webhook():
-    """Separate webhook for ATR 2 / 2.7 SuperTrend signals.
-       Routes ONLY to OB/AIT Workstation pages — does NOT touch live models."""
+    """Alias of /api/tradingview/webhook — same SuperTrend ATR 10 / Mult 3.0 queue.
+
+    Enqueues Futures + OB + AIT together (identical to the common webhook).
+    """
     try:
+        refresh_master_state_from_db()
         payload = parse_tradingview_payload()
         secret = str(payload.get("secret") or payload.get("token") or "").strip()
         if TRADINGVIEW_WEBHOOK_SECRET and secret != TRADINGVIEW_WEBHOOK_SECRET:
@@ -4989,45 +5049,33 @@ def api_tradingview_workstation_webhook():
         spot = float(spot_raw)
         bar_time = payload.get("time_close") or payload.get("bar_time") or payload.get("time") or now_utc_iso()
 
+        persist_master_state_updates({
+            "nifty_spot": spot,
+            "nifty_trend": signal,
+            "nifty_lot_size": CURRENT_NIFTY_LOT_SIZE,
+            "signal_source": "TRADINGVIEW_ST_10_3",
+            "signal_time": str(bar_time),
+            "nifty_trade_date": date.today().isoformat(),
+        })
+        refresh_master_state_from_db()
+
         log_automation(
-            f"Workstation signal {signal} @ {spot} (ATR 2 / 2.7)",
-            details={"source": "TRADINGVIEW_WORKSTATION", "bar_time": bar_time}
+            f"Common-alias signal {signal} @ {spot} ({models_v2.SIGNAL_SUPERTREND_LABEL})",
+            details={"source": "TRADINGVIEW_ST_10_3", "bar_time": bar_time, "via": "workstation_webhook"}
         )
 
-        # Route through models_v2. Single-tenant (default): one global run.
-        # Multi-tenant (flag on): fan out per user, each scoped to their own
-        # data + token + modes via _UserScopedApp — one user's failure is isolated.
-        try:
-            import sys as _sys
-            _selfmod = _sys.modules[__name__]
-            if multi_tenant_enabled():
-                for _uid in active_trading_users():
-                    try:
-                        models_v2.handle_workstation_signal(_UserScopedApp(_selfmod, _uid), signal, spot, str(bar_time))
-                    except Exception as _ue:
-                        log_automation(f"workstation signal ERROR for user {_uid}: {_ue}", level="ERROR")
-                log_automation("MODELS_V2 workstation signal dispatched (multi-tenant)", level="INFO")
-            else:
-                models_v2.handle_workstation_signal(_selfmod, signal, spot, str(bar_time))
-                log_automation("MODELS_V2 workstation signal dispatched", level="INFO")
-            # Strategy instances that share the workstation webhook — each runs
-            # scoped to its own book (paper unless the instance itself is Live).
-            try:
-                import sys as _sys2
-                for _st in get_strategies():
-                    if _st.get("webhook") == "existing" and _st.get("mode", "off") != "off" \
-                       and _st.get("type") in ("ob_workstation", "ait_workstation", "nexp_workstation"):
-                        try:
-                            models_v2._process_model_signal(_StrategyScopedApp(_sys2.modules[__name__], _st),
-                                                            _st["type"], signal, spot, str(bar_time))
-                        except Exception as _se:
-                            log_automation(f"strategy instance signal ERROR [{_st.get('id')}]: {_se}", level="ERROR")
-            except Exception:
-                pass
-        except Exception as e:
-            log_automation(f"MODELS_V2 workstation signal ERROR: {e}", level="ERROR")
-
-        return jsonify({"ok": True, "signal": signal, "spot": spot, "channel": "workstation"})
+        ensure_sync_thread()
+        _q = enqueue_signal(signal, spot, str(bar_time))
+        return jsonify({
+            "ok": True,
+            "signal": signal,
+            "spot": spot,
+            "channel": "common_st_10_3",
+            "queued": _q.get("queued"),
+            "duplicate": _q.get("duplicate"),
+            "signal_id": _q.get("id"),
+            "supertrend": models_v2.SIGNAL_SUPERTREND_LABEL,
+        })
     except Exception as e:
         log_automation(f"Workstation webhook error: {e}", level="ERROR",
                        details={"traceback": traceback.format_exc()})
