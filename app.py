@@ -693,6 +693,61 @@ def paper_phase_archive(data):
     return (data.get("archive", []) or []) if isinstance(data, dict) else []
 
 
+_NEXP_TRIM_FLAG = "nexp_trimmed_invalid_last2_20260917"
+
+
+def _trim_last_n_from_list(rows, n):
+    rows = list(rows or [])
+    if n <= 0 or len(rows) < n:
+        return rows, 0
+    return rows[:-n], n
+
+
+def trim_nexp_invalid_last_rows(n=2):
+    """One-shot: drop the last N invalid Nifty EXP rows from trades + archive
+    (+ phase_stash) on the global bundle and any per-user bundles. Idempotent
+    via kv flag — safe to call on every /api/nexp_workstation hit."""
+    if kv_get(_NEXP_TRIM_FLAG):
+        return 0
+    keys = ["strategy_bundle::nexp_workstation"]
+    try:
+        for u in get_all_users() or []:
+            uid = u.get("id")
+            if uid:
+                keys.append("strategy_bundle::%s::nexp_workstation" % uid)
+    except Exception:
+        pass
+    total = 0
+    for key in keys:
+        data = kv_get(key, None)
+        if not isinstance(data, dict):
+            continue
+        changed = False
+        for field in ("trades", "archive"):
+            trimmed, dropped = _trim_last_n_from_list(data.get(field), n)
+            if dropped:
+                data[field] = trimmed
+                total += dropped
+                changed = True
+        stash = data.get("phase_stash")
+        if isinstance(stash, dict):
+            for ph in ("paper", "live"):
+                trimmed, dropped = _trim_last_n_from_list(stash.get(ph), n)
+                if dropped:
+                    stash[ph] = trimmed
+                    total += dropped
+                    changed = True
+            data["phase_stash"] = stash
+        if changed:
+            kv_set(key, data)
+            log_automation(
+                f"nexp_workstation: trimmed last {n} invalid row(s) from {key}",
+                level="INFO",
+            )
+    kv_set(_NEXP_TRIM_FLAG, {"at": now_utc_iso(), "dropped": total, "n": n})
+    return total
+
+
 def _futures_bundle_key(user_id=None):
     return ("strategy_bundle::%s::futures" % user_id) if user_id else "strategy_bundle::futures"
 
@@ -1857,6 +1912,10 @@ def api_futures():
 
 @app.route("/api/nexp_workstation", methods=["GET", "POST"])
 def api_nexp_workstation():
+    try:
+        trim_nexp_invalid_last_rows(2)
+    except Exception as e:
+        log_automation(f"nexp trim last rows ERROR: {e}", level="WARNING")
     bundle = kv_get(read_bundle_key("nexp_workstation"), {}) or {}
     cfg = bundle.get("config") or nexp_workstation_config
     trades = bundle.get("trades") or []
