@@ -1028,6 +1028,26 @@ def active_trading_users(model=None):
     return out
 
 
+# Scoped Kite user for _UserScopedApp → quote helpers (defined before the class).
+_kite_ctx = threading.local()
+
+
+def _resolve_kite_user_id(explicit=None):
+    """Prefer explicit → scoped engine user → logged-in session user."""
+    if explicit is not None:
+        return explicit
+    scoped = getattr(_kite_ctx, "user_id", None)
+    if scoped:
+        return scoped
+    try:
+        from flask import has_request_context
+        if has_request_context():
+            return session.get("user_id")
+    except Exception:
+        pass
+    return None
+
+
 class _UserScopedApp:
     """Wraps the app module so models_v2 (and any handler) operates on ONE user's
     data + token + modes, with NO changes to models_v2 itself. Strategy-bundle and
@@ -1052,6 +1072,7 @@ class _UserScopedApp:
         return self._app.kv_set(self._rk(key), value)
 
     def get_kite(self, require_token=True):
+        _kite_ctx.user_id = self._uid
         return self._app.get_kite(require_token=require_token, user_id=self._uid)
 
     def get_access_token(self, user_id=None):
@@ -1073,9 +1094,21 @@ class _UserScopedApp:
         return self._app.send_telegram(message, chat_id=cid)
 
     def __getattr__(self, name):
-        # Everything else (log_automation, send_telegram, quote helpers, master_state,
-        # constants, etc.) delegates to the real app module unchanged.
-        return getattr(self._app, name)
+        # Quote helpers (get_nifty_spread_quote, quote_option, …) call module-level
+        # get_kite() with no user_id. Push this user's id into _kite_ctx for the
+        # duration of the call so Nifty EXP / AIT spreads use the same token as
+        # Strangle backfill.
+        attr = getattr(self._app, name)
+        if callable(attr):
+            def _scoped(*args, **kwargs):
+                prev = getattr(_kite_ctx, "user_id", None)
+                _kite_ctx.user_id = self._uid
+                try:
+                    return attr(*args, **kwargs)
+                finally:
+                    _kite_ctx.user_id = prev
+            return _scoped
+        return attr
 
 def _alert_live_blocked(transaction_type, symbol, quantity, reason):
     _model = _model_from_reason(reason)
@@ -1243,20 +1276,30 @@ def zerodha_ready(user_id=None):
     api_key, api_secret = resolve_kite_creds(user_id)
     return bool(api_key and api_secret)
 
+
 def get_kite(require_token=True, user_id=None):
     if KiteConnect is None:
         raise RuntimeError("kiteconnect package not installed. Run: pip install kiteconnect")
-    api_key, api_secret = resolve_kite_creds(user_id)
+    uid = _resolve_kite_user_id(user_id)
+    api_key, api_secret = resolve_kite_creds(uid)
     if not api_key or not api_secret:
         raise RuntimeError("Missing Kite API key/secret. Add your Zerodha API credentials first.")
     kite = KiteConnect(api_key=api_key)
     if require_token:
-        # With user_id -> that user's own token only (no cross-account fallback).
-        # Without -> the instance/global token (engine), with session fallback.
-        if user_id:
-            access_token = get_access_token(user_id)
-        else:
-            access_token = get_access_token() or session.get("kite_access_token")
+        # Order matters: a stale GLOBAL kite_access_token must not shadow a
+        # fresh per-user / session token (Nifty EXP Fetch ATM/OTM vs Strangle
+        # backfill used to disagree for exactly this reason).
+        access_token = None
+        if uid:
+            access_token = get_access_token(uid)
+        try:
+            from flask import has_request_context
+            if not access_token and has_request_context():
+                access_token = session.get("kite_access_token")
+        except Exception:
+            pass
+        if not access_token:
+            access_token = get_access_token()  # instance/global last
         if not access_token:
             raise RuntimeError("Zerodha access token missing. Please connect Zerodha first.")
         kite.set_access_token(access_token)

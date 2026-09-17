@@ -1441,10 +1441,30 @@ if(document.getElementById('aitw-tbody')) aitwRecalc();
   </tr>
 </table>
 
+<!-- ROW 1b: Live premium check (same Zerodha session as Strangle backfill) -->
+<table style="margin-bottom:3px">
+  <tr>
+    <td class="cell-black" style="width:110px;font-weight:bold">Spot</td>
+    <td class="cell-blue" style="width:100px"><input id="nexpw-spot" class="ws-inp" type="number" placeholder="Spot"/></td>
+    <td class="cell-black" style="width:70px;font-weight:bold">Trend</td>
+    <td class="cell-blue" style="width:90px">
+      <select id="nexpw-trend" class="ws-inp">
+        <option value="LONG">LONG</option>
+        <option value="SHORT">SHORT</option>
+      </select>
+    </td>
+    <td class="cell-blue" style="width:130px;text-align:center;background:#fff!important">
+      <button type="button" class="ws-btn-add" onclick="nexpwFetchPremiums()" style="padding:3px 10px">Fetch ATM/OTM</button>
+    </td>
+    <td id="nexpw-quote-status" style="text-align:left;white-space:normal;color:#555;font-size:10px">
+      Live premiums use your Zerodha session. Trade log rows still open on Monday 15:14 IST.
+    </td>
+  </tr>
+</table>
+
 <!-- ROW 2-3: Stats -->
 <table style="margin-bottom:6px">
   <tr>
-    <td class="cell-stats-lbl">Spot</td>
     <td class="cell-stats-lbl">Lot Size</td>
     <td class="cell-stats-lbl">Curr Cap</td>
     <td class="cell-stats-lbl">Returns</td>
@@ -1460,7 +1480,6 @@ if(document.getElementById('aitw-tbody')) aitwRecalc();
     <td class="cell-stats-lbl">Avg Loss</td>
   </tr>
   <tr>
-    <td class="cell-blue"><input id="nexpw-spot" class="ws-inp" type="number" placeholder="Spot"/></td>
     <td class="cell-black" id="nexpw-lotsize">65</td>
     <td class="cell-black" id="nexpw-s-currcap">—</td>
     <td id="nexpw-s-returns">—</td>
@@ -1534,6 +1553,42 @@ function nexpwCalcQty(prevCap, prevDD){
   const q = nexpwMround(prevCap * adjRisk * (1+tol) / NEXPW_GAP, NEXPW_LOT);
   return Math.max(q, 0);
 }
+
+window.nexpwFetchPremiums = async function(){
+  const statusEl = document.getElementById('nexpw-quote-status');
+  const spotEl = document.getElementById('nexpw-spot');
+  const trendEl = document.getElementById('nexpw-trend');
+  const spot = parseFloat(spotEl?.value || 0);
+  const signal = (trendEl?.value || 'LONG').toUpperCase();
+  if(!spot){
+    if(statusEl){ statusEl.style.color = '#c0322b'; statusEl.textContent = 'Enter spot first.'; }
+    return;
+  }
+  if(statusEl){ statusEl.style.color = '#555'; statusEl.textContent = 'Fetching live ATM/OTM premiums from Zerodha…'; }
+  try{
+    const res = await fetch('/api/zerodha/spread_quote', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ signal, spot, strike_gap: NEXPW_GAP }),
+    });
+    const d = await res.json();
+    if(!res.ok || d.ok === false){
+      if(statusEl){
+        statusEl.style.color = '#c0322b';
+        statusEl.textContent = d.error || 'Spread quote failed — reconnect Zerodha on this dashboard (not React /stairs).';
+      }
+      return;
+    }
+    if(statusEl){
+      statusEl.style.color = '#1a7f37';
+      statusEl.textContent =
+        `${d.option_type} spread · exp ${d.expiry} · ATM ${d.atm_strike} sell ₹${Number(d.atm_sell_premium).toFixed(2)}` +
+        ` · OTM ${d.otm_strike} buy ₹${Number(d.otm_buy_premium).toFixed(2)}`;
+    }
+  }catch(e){
+    if(statusEl){ statusEl.style.color = '#c0322b'; statusEl.textContent = e.message || 'Fetch failed'; }
+  }
+};
 
 window.nexpwSyncFromDB = async function(){
   try {
@@ -1990,7 +2045,7 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
 
 <!-- ══ SUPERTREND PANEL ══ -->
 <div id="panel-st" class="bt-panel active">
-  <div class="note" style="margin-bottom:16px">SuperTrend — NIFTY 50 | 1H | ATR 17, Multiplier 0.9 | Jan 2014 – Apr 2026 | Capital: ₹10,00,000 | 150 contracts</div>
+  <div class="note" style="margin-bottom:16px">SuperTrend — NIFTY 50 | 1H | ATR 10, Multiplier 3.0 | Jan 2014 – Apr 2026 | Capital: ₹10,00,000 | 150 contracts</div>
 
   <!-- KPI Strip -->
   <div class="kpi-row">
