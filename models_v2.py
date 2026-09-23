@@ -642,6 +642,12 @@ def _process_model_signal(app, module_name, signal, spot, signal_time):
         # ── ENTRY CUTOFF — no NEW positions within the final minutes before
         # square-off (NSE CAS extended close). Closes above still happened. ──
         if _past_entry_cutoff():
+            # Still stamp the signal so the dashboard reflects the latest TV tick
+            # even when we refuse to open a new book.
+            cfg = data.get("config", {}) or {}
+            cfg["signal_source"] = "TRADINGVIEW"
+            cfg["signal_time"] = signal_time
+            data["config"] = cfg
             data["trades"] = trades
             app.kv_set(config["storage"], data)
             app.log_automation(

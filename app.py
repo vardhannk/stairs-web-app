@@ -3524,6 +3524,9 @@ def api_nifty_option_ltp():
 @app.route("/api/tradingview/status")
 def api_tradingview_status():
     refresh_master_state_from_db()
+    pend = kv_get(PENDING_SIGNALS_KEY, []) or []
+    done = kv_get(PROCESSED_SIGNALS_KEY, []) or []
+    modes = get_model_modes()
     return jsonify({
         "ok": True,
         "configured": bool(TRADINGVIEW_WEBHOOK_SECRET),
@@ -3531,6 +3534,20 @@ def api_tradingview_status():
         "signal_source": master_state.get("signal_source", "MANUAL"),
         "signal_time": master_state.get("signal_time"),
         "signal_time_ist": _to_ist_display(master_state.get("signal_time")),
+        "nifty_trend": master_state.get("nifty_trend"),
+        "nifty_spot": master_state.get("nifty_spot"),
+        "multi_tenant_enabled": multi_tenant_enabled(),
+        "active_trading_users": len(active_trading_users()),
+        "model_modes": modes,
+        "live_enabled_models": get_live_enabled_models(),
+        "pending_signals": len(pend) if isinstance(pend, list) else 0,
+        "processed_tail": (done[-5:] if isinstance(done, list) else []),
+        "routing": {
+            "futures": "webhook → enqueue → direct_module_store_sync_patch",
+            "ob_workstation": "webhook → handle_main_signal → _process_model_signal",
+            "ait_workstation": "webhook → handle_main_signal → _process_model_signal",
+            "nexp_workstation": "scheduler Mon 15:14 entry / Tue exit from prevailing OB/AIT (not every TV tick)",
+        },
     })
 
 
@@ -3559,8 +3576,8 @@ def api_tradingview_webhook():
         })
         refresh_master_state_from_db()
         log_automation(
-            f"TradingView signal {signal} @ {spot} ({getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")})",
-            details={"source": "TRADINGVIEW", "bar_time": bar_time, "symbol": payload.get("symbol") or payload.get("ticker"), "timeframe": payload.get("timeframe"), "supertrend": getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")}
+            f"TradingView signal {signal} @ {spot} ({getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)')})",
+            details={"source": "TRADINGVIEW", "bar_time": bar_time, "symbol": payload.get("symbol") or payload.get("ticker"), "timeframe": payload.get("timeframe"), "supertrend": getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)')}
         )
         # Everything above this line is local bookkeeping and is already
         # done: the signal is persisted and the dashboard will show it. What
@@ -3788,10 +3805,21 @@ def live_open_all_modules(signal, spot, quote, user_id=None):
         try:
             # Use rollover logic on signal entry — if expiry within 7 days use next month
             contract = pick_nifty_futures_contract(use_rollover_logic=True)
-            kite = get_kite(require_token=True, user_id=user_id)
-            ltp_data = kite.ltp([f"{contract['exchange']}:{contract['tradingsymbol']}"])
-            fut_price = float(ltp_data[f"{contract['exchange']}:{contract['tradingsymbol']}"]["last_price"])
             fut_sym = contract["tradingsymbol"]
+            fut_price = float(spot or 0)
+            try:
+                kite = get_kite(require_token=True, user_id=user_id)
+                ltp_data = kite.ltp([f"{contract['exchange']}:{contract['tradingsymbol']}"])
+                fut_price = float(ltp_data[f"{contract['exchange']}:{contract['tradingsymbol']}"]["last_price"])
+            except Exception as _ltp_err:
+                # After hours / Kite blip: still book paper from TV spot so the
+                # multi-tenant futures book stays in sync with the webhook.
+                log_automation(
+                    f"OPEN FUTURES LTP fallback to spot {spot}: {_ltp_err}",
+                    level="WARNING",
+                )
+                if fut_price <= 0:
+                    raise
             qty = CURRENT_NIFTY_LOT_SIZE * int(futures_config.get("leverage", 2))
             txn = "BUY" if signal == "LONG" else "SELL"
             r = place_live_order_with_retry(txn, fut_sym, qty, reason="futures_entry", user_id=user_id)
@@ -3803,6 +3831,11 @@ def live_open_all_modules(signal, spot, quote, user_id=None):
                 fut_data = kv_get(_futures_bundle_key(user_id), {}) or {}
                 fut_trades = fut_data.get("trades", [])
                 positions = kv_get(_pos_cache_key(user_id), {}) or {}
+                # Update futures config markers (UI "last signal") for this book
+                fut_cfg = fut_data.get("config") or {}
+                fut_cfg["signal_source"] = "TRADINGVIEW"
+                fut_cfg["signal_time"] = now_utc_iso()
+                fut_data["config"] = fut_cfg
                 fut_trades.append({"date": today, "trend": signal, "entry": fut_price, "action_type": "Signal",
                                     "partial_exit1": "", "partial_exit1_date": "", "partial_exit2": "", "partial_exit2_date": "",
                                     "status": "OPEN", "entry_signal_time": now_utc_iso(), "symbol": fut_sym, "qty": qty,
@@ -4905,13 +4938,13 @@ def _execute_signal(item):
                         level="ERROR",
                     )
             log_automation(
-                f"MODELS_V2 OB+AIT dispatched multi-tenant ({getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")})",
+                f"MODELS_V2 OB+AIT dispatched multi-tenant ({getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)')})",
                 level="INFO",
             )
         else:
             models_v2.handle_main_signal(_selfmod, signal, spot, str(bar_time))
             log_automation(
-                f"MODELS_V2 OB+AIT dispatched ({getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")})",
+                f"MODELS_V2 OB+AIT dispatched ({getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)')})",
                 level="INFO",
             )
         # Strategy instances that share the SuperTrend webhook
@@ -5162,7 +5195,7 @@ def api_tradingview_workstation_webhook():
         refresh_master_state_from_db()
 
         log_automation(
-            f"Common-alias signal {signal} @ {spot} ({getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")})",
+            f"Common-alias signal {signal} @ {spot} ({getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)')})",
             details={"source": "TRADINGVIEW_ST_10_3", "bar_time": bar_time, "via": "workstation_webhook"}
         )
 
@@ -5176,7 +5209,7 @@ def api_tradingview_workstation_webhook():
             "queued": _q.get("queued"),
             "duplicate": _q.get("duplicate"),
             "signal_id": _q.get("id"),
-            "supertrend": getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)"),
+            "supertrend": getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)'),
         })
     except Exception as e:
         log_automation(f"Workstation webhook error: {e}", level="ERROR",
