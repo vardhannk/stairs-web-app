@@ -21,7 +21,8 @@ The platform hosts multiple quantitative strategies with real-time risk manageme
    - **Exit Rules**: 30% Profit Target on credit collected or ₹3,600 Stop Loss limit.
 
 3. **`supertrend` — SuperTrend 1-Hour Trend Following Strategy**:
-   - NIFTY 50 1-Hour chart with ATR 17 and Multiplier 0.9.
+   - NIFTY 50 1-Hour chart with ATR 10 and Multiplier 3.0.
+   - Common webhook `/api/tradingview/webhook` drives Futures + Options Buy + AIT (NiftyEXP follows OB/AIT).
 
 4. **`orb` — 15-Minute Opening Range Breakout Strategy**:
    - Capitalizes on initial 15-minute high/low expansions.

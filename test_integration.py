@@ -136,7 +136,7 @@ class TestWiring:
             "Main webhook does NOT call models_v2.handle_main_signal — OB/AIT/NiftyEXP will not respond to signals!"
 
     def test_workstation_webhook_calls_models_v2(self):
-        """Workstation webhook must call models_v2.handle_workstation_signal."""
+        """Workstation webhook is a common-webhook alias (enqueues unified queue)."""
         src = read_app_source()
         ws_match = re.search(
             r"def\s+api_tradingview_workstation_webhook\s*\(",
@@ -147,8 +147,8 @@ class TestWiring:
         rest = src[ws_match.start():]
         next_route = re.search(r"\n@app\.route|\ndef\s+", rest[10:])
         ws_block = rest[:next_route.start() + 10] if next_route else rest
-        assert "models_v2.handle_workstation_signal" in ws_block, \
-            "Workstation webhook does NOT call models_v2.handle_workstation_signal!"
+        assert "enqueue_signal" in ws_block, \
+            "Workstation webhook alias must enqueue_signal (common Futures+OB+AIT path)!"
 
     def test_scheduler_calls_models_v2_scheduler_tick(self):
         """position_sync_job scheduler must invoke models_v2.scheduler_tick every cycle."""

@@ -3559,8 +3559,8 @@ def api_tradingview_webhook():
         })
         refresh_master_state_from_db()
         log_automation(
-            f"TradingView signal {signal} @ {spot} ({models_v2.SIGNAL_SUPERTREND_LABEL})",
-            details={"source": "TRADINGVIEW", "bar_time": bar_time, "symbol": payload.get("symbol") or payload.get("ticker"), "timeframe": payload.get("timeframe"), "supertrend": models_v2.SIGNAL_SUPERTREND_LABEL}
+            f"TradingView signal {signal} @ {spot} ({getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")})",
+            details={"source": "TRADINGVIEW", "bar_time": bar_time, "symbol": payload.get("symbol") or payload.get("ticker"), "timeframe": payload.get("timeframe"), "supertrend": getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")}
         )
         # Everything above this line is local bookkeeping and is already
         # done: the signal is persisted and the dashboard will show it. What
@@ -4905,13 +4905,13 @@ def _execute_signal(item):
                         level="ERROR",
                     )
             log_automation(
-                f"MODELS_V2 OB+AIT dispatched multi-tenant ({models_v2.SIGNAL_SUPERTREND_LABEL})",
+                f"MODELS_V2 OB+AIT dispatched multi-tenant ({getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")})",
                 level="INFO",
             )
         else:
             models_v2.handle_main_signal(_selfmod, signal, spot, str(bar_time))
             log_automation(
-                f"MODELS_V2 OB+AIT dispatched ({models_v2.SIGNAL_SUPERTREND_LABEL})",
+                f"MODELS_V2 OB+AIT dispatched ({getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")})",
                 level="INFO",
             )
         # Strategy instances that share the SuperTrend webhook
@@ -5162,7 +5162,7 @@ def api_tradingview_workstation_webhook():
         refresh_master_state_from_db()
 
         log_automation(
-            f"Common-alias signal {signal} @ {spot} ({models_v2.SIGNAL_SUPERTREND_LABEL})",
+            f"Common-alias signal {signal} @ {spot} ({getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)")})",
             details={"source": "TRADINGVIEW_ST_10_3", "bar_time": bar_time, "via": "workstation_webhook"}
         )
 
@@ -5176,7 +5176,7 @@ def api_tradingview_workstation_webhook():
             "queued": _q.get("queued"),
             "duplicate": _q.get("duplicate"),
             "signal_id": _q.get("id"),
-            "supertrend": models_v2.SIGNAL_SUPERTREND_LABEL,
+            "supertrend": getattr(models_v2, "SIGNAL_SUPERTREND_LABEL", "SuperTrend ATR 10 / Mult 3.0 (1H)"),
         })
     except Exception as e:
         log_automation(f"Workstation webhook error: {e}", level="ERROR",

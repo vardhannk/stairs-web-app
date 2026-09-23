@@ -15,22 +15,27 @@ Architecture principles:
   5. ATOMIC WRITES — close + open happens as a single state mutation.
   6. IDEMPOTENT — scheduler actions guarded by last_action_date marker.
 
+Signal source (TradingView SuperTrend ATR 10 / Mult 3.0 on NIFTY 50 1H):
+  Common webhook /api/tradingview/webhook → Futures (app.py) + OB + AIT.
+  /api/tradingview/workstation_webhook is an alias of the same queue.
+  NiftyEXP follows prevailing OB/AIT direction on Mon/Tue schedule.
+
 Storage keys (SQLite kv table):
-  Main strategy (ATR 17 / 0.9):
-    strategy_bundle::options_buy
-    strategy_bundle::options_ait
-    strategy_bundle::nifty_exp
-  Workstation strategy (ATR 2 / 2.7):
+  Futures (app.py):
+    strategy_bundle::futures
+  Options models (this module — same SuperTrend 10/3 signal):
     strategy_bundle::ob_workstation
     strategy_bundle::ait_workstation
+    strategy_bundle::nexp_workstation
   Cache (positions dict — UI display only, never read by handlers):
     dry_run_module_positions
     workstation_positions
 
 Public entry points (called from app.py):
-  Main webhook signal:
+  Common SuperTrend 10/3 webhook signal:
     handle_main_signal(signal, spot, signal_time, app_module)
-  Workstation webhook signal:
+    → routes OB + AIT (Futures handled in app.py module sync)
+  Alias (same signal; prefer the common webhook URL):
     handle_workstation_signal(signal, spot, signal_time, app_module)
   Scheduler tick (called every 60s from app.py's position_sync_job):
     scheduler_tick(now_ist, app_module)
@@ -49,6 +54,12 @@ import traceback
 # ════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION — strategy rules locked in as constants
 # ════════════════════════════════════════════════════════════════════════════
+
+# TradingView SuperTrend shared by Futures, OB, AIT, NiftyEXP (TV alert params).
+SIGNAL_SUPERTREND_ATR = 10
+SIGNAL_SUPERTREND_MULT = 3.0
+SIGNAL_SUPERTREND_TF = "1H"
+SIGNAL_SUPERTREND_LABEL = f"SuperTrend ATR {SIGNAL_SUPERTREND_ATR} / Mult {SIGNAL_SUPERTREND_MULT} ({SIGNAL_SUPERTREND_TF})"
 
 NIFTY_LOT_SIZE = 65
 STRIKE_GAP     = 100
@@ -964,26 +975,28 @@ def scheduler_expiry_rollover(app, module_name):
 # ════════════════════════════════════════════════════════════════════════════
 
 def handle_main_signal(app, signal, spot, signal_time):
-    """RETIRED 2026-07-24 — legacy models Options Buy / Options AIT / Nifty EXP
-    were removed at the user's request. This main (ATR 17/0.9) webhook no longer
-    drives any model. Kept as a no-op so the app.py webhook caller stays valid.
-    Workstation models are driven by handle_workstation_signal + scheduler_tick."""
+    """Common SuperTrend ATR 10 / Mult 3.0 webhook — drives OB + AIT.
+
+    Futures is handled separately in app.py via direct_module_store_sync_patch.
+    NiftyEXP does not flip on every tick — it follows prevailing OB/AIT on Mon/Tue.
+    """
     app.log_automation(
-        f"handle_main_signal: legacy models retired — signal {signal} ignored (no-op)",
-        level="INFO")
-    return
+        f"handle_main_signal: {SIGNAL_SUPERTREND_LABEL} → OB+AIT ({signal} @ {spot})",
+        level="INFO",
+    )
+    handle_workstation_signal(app, signal, spot, signal_time)
 
 
 def handle_workstation_signal(app, signal, spot, signal_time):
-    """Workstation TradingView webhook (ATR 2 / 2.7) — routes to OBW, AITW.
+    """OB + AIT on SuperTrend ATR 10 / Mult 3.0 (common webhook or alias).
 
     NiftyEXP Workstation is intentionally NOT wired here — reverted 2026-08-07.
     Its design: it FOLLOWS the prevailing OB/AIT direction (see
     _prevailing_workstation_direction, used by scheduler_nexp_workstation_monday_entry),
     but only ACTS on its own two fixed weekly checkpoints — enter Monday 15:14,
     hard-exit Tuesday, no rollover. It does not react to every intraday signal
-    tick the way OB/AIT do. (A prior change this session briefly wired it into
-    this real-time path, which was incorrect — reverted per user correction.)"""
+    tick the way OB/AIT do.
+    """
     _process_model_signal(app, "ob_workstation",  signal, spot, signal_time)
     _process_model_signal(app, "ait_workstation", signal, spot, signal_time)
 
@@ -991,9 +1004,8 @@ def handle_workstation_signal(app, signal, spot, signal_time):
 def _prevailing_workstation_direction(app):
     """Return the direction (LONG/SHORT) currently held by OB/AIT Workstation.
 
-    This is the prevailing ATR 2/2.7 workstation signal — read from the trend of
-    the current open OBW (then AITW) trade. Falls back to the last closed OBW
-    trade's trend, then None.
+    Prevailing SuperTrend ATR 10/3 workstation signal — from open OBW (then AITW)
+    trade, else last closed OBW trade, else None.
     """
     for module in ("ob_workstation", "ait_workstation"):
         data = app.kv_get(MODEL_CONFIG[module]["storage"], {}) or {}
@@ -1014,7 +1026,7 @@ def _prevailing_workstation_direction(app):
 
 def scheduler_nexp_workstation_monday_entry(app):
     """Monday 3:15 PM IST — open a NiftyEXP-Workstation spread using the prevailing
-    OB/AIT Workstation (ATR 2/2.7) direction + live spot."""
+    OB/AIT Workstation (SuperTrend ATR 10/3) direction + live spot."""
     config = MODEL_CONFIG["nexp_workstation"]
     today  = _today_iso()
     label  = config["label"]
