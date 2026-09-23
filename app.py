@@ -2630,6 +2630,131 @@ def api_clear_seed():
     return jsonify({"ok": True, "model": model, "cleared": len(old)})
 
 
+# Models whose paper+live books the admin wipe is allowed to destroy.
+# Nifty EXP is intentionally excluded — keep its history.
+WIPEABLE_MODEL_BOOKS = ("futures", "ob_workstation", "ait_workstation")
+
+
+def wipe_model_books(models=None, *, include_instances=True):
+    """DESTRUCTIVE: erase paper + live trades/archives for the given models.
+
+    Clears global + every per-user strategy_bundle, phase_stash, seed_backup,
+    and related position-cache entries. Does NOT touch nexp_workstation.
+    Returns a summary dict of what was wiped.
+    """
+    targets = [m for m in (models or WIPEABLE_MODEL_BOOKS) if m in WIPEABLE_MODEL_BOOKS]
+    if not targets:
+        return {"ok": False, "error": "no wipeable models requested", "wiped": {}}
+
+    user_ids = []
+    try:
+        user_ids = [u.get("id") for u in (get_all_users() or []) if u.get("id")]
+    except Exception:
+        user_ids = []
+
+    keys = []
+    for m in targets:
+        keys.append("strategy_bundle::%s" % m)
+        for uid in user_ids:
+            keys.append("strategy_bundle::%s::%s" % (uid, m))
+    if include_instances:
+        try:
+            for st in (get_strategies() or []):
+                if st.get("type") in targets and st.get("id"):
+                    keys.append(strategy_bundle_key(st["id"]))
+        except Exception:
+            pass
+
+    wiped = {}
+    for key in keys:
+        data = kv_get(key, None)
+        if not isinstance(data, dict):
+            continue
+        n_trades = len(data.get("trades") or [])
+        n_arch = len(data.get("archive") or [])
+        stash = data.get("phase_stash") or {}
+        n_paper = len(stash.get("paper") or []) if isinstance(stash, dict) else 0
+        n_live = len(stash.get("live") or []) if isinstance(stash, dict) else 0
+        n_seed = len(data.get("seed_backup") or [])
+        total = n_trades + n_arch + n_paper + n_live + n_seed
+        if total == 0 and not data.get("trades") and not data.get("archive"):
+            # Still normalize empty books so UI is clean
+            pass
+        cfg = data.get("config") if isinstance(data.get("config"), dict) else {}
+        cfg = dict(cfg)
+        cfg.pop("signal_time", None)
+        cfg.pop("signal_source", None)
+        data["trades"] = []
+        data["archive"] = []
+        data["phase_stash"] = {"paper": [], "live": []}
+        data.pop("seed_backup", None)
+        data["active_phase"] = "paper"
+        data["config"] = cfg
+        kv_set(key, data)
+        wiped[key] = {
+            "trades": n_trades,
+            "archive": n_arch,
+            "phase_paper": n_paper,
+            "phase_live": n_live,
+            "seed_backup": n_seed,
+        }
+
+    # Position caches (global + per-user): drop futures / OB / AIT entries only
+    pos_keys = ["dry_run_module_positions", "workstation_positions"]
+    for uid in user_ids:
+        pos_keys.append("dry_run_module_positions::%s" % uid)
+        pos_keys.append("workstation_positions::%s" % uid)
+    drop_names = set(targets) | {"futures", "options_buy", "options_ait", "ob_workstation", "ait_workstation"}
+    for pk in pos_keys:
+        pos = kv_get(pk, None)
+        if not isinstance(pos, dict) or not pos:
+            continue
+        before = len(pos)
+        for name in list(pos.keys()):
+            if name in drop_names or any(name.startswith(m) for m in targets):
+                pos.pop(name, None)
+        if len(pos) != before:
+            kv_set(pk, pos)
+            wiped[pk] = {"removed_keys": before - len(pos)}
+
+    # Legacy automation_state open option position (dashboard leftover)
+    try:
+        auto = kv_get("automation_state", None)
+        if isinstance(auto, dict) and auto.get("active_position"):
+            auto = dict(auto)
+            auto["active_position"] = None
+            kv_set("automation_state", auto)
+            wiped["automation_state.active_position"] = {"cleared": True}
+    except Exception:
+        pass
+
+    log_automation(
+        f"WIPE model books {targets}: {sum(1 for k in wiped if k.startswith('strategy_bundle'))} bundles",
+        level="WARNING",
+        details={"models": targets, "keys": list(wiped.keys())},
+    )
+    return {"ok": True, "models": targets, "wiped": wiped}
+
+
+@app.route("/api/admin/wipe_model_books", methods=["POST"])
+def api_wipe_model_books():
+    """Admin-only: permanently clear paper+live history for Futures / OB / AIT.
+    Nifty EXP is never touched. Body: {"confirm":"WIPE_FUTURES_OB_AIT"}."""
+    if not session.get("is_admin"):
+        return jsonify({"ok": False, "error": "admin required"}), 403
+    body = request.get_json(force=True) or {}
+    if body.get("confirm") != "WIPE_FUTURES_OB_AIT":
+        return jsonify({
+            "ok": False,
+            "error": "confirm must be exactly WIPE_FUTURES_OB_AIT",
+            "will_wipe": list(WIPEABLE_MODEL_BOOKS),
+            "will_keep": ["nexp_workstation", "nifty_strangle_w"],
+        }), 400
+    models = body.get("models") or list(WIPEABLE_MODEL_BOOKS)
+    result = wipe_model_books(models, include_instances=bool(body.get("include_instances", True)))
+    return jsonify(result)
+
+
 def _open_positions_by_model(user_id=None):
     """Count OPEN trades per model (used by the deactivation modal). Per-user if given."""
     out = {}
