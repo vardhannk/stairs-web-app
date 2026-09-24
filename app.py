@@ -294,6 +294,25 @@ def normalize_signal(value):
 
 
 
+def _tv_json_loads(raw: str):
+    """Parse a TradingView body. {{close}} is unquoted, so 23,188.65 is invalid JSON and the secret is dropped."""
+    try:
+        return json.loads(raw)
+    except Exception:
+        repaired = []
+        for i, ch in enumerate(raw):
+            if ch == "," and i > 0 and i + 1 < len(raw) and raw[i - 1].isdigit() and raw[i + 1].isdigit():
+                continue
+            repaired.append(ch)
+        fixed = "".join(repaired)
+        if fixed != raw:
+            try:
+                return json.loads(fixed)
+            except Exception:
+                pass
+        return None
+
+
 def parse_tradingview_payload():
     payload = request.get_json(silent=True)
     if isinstance(payload, dict):
@@ -301,10 +320,10 @@ def parse_tradingview_payload():
     raw = (request.data or b'').decode('utf-8', errors='ignore').strip()
     if not raw:
         return {}
-    try:
-        return json.loads(raw)
-    except Exception:
-        return {'message': raw}
+    parsed = _tv_json_loads(raw)
+    if isinstance(parsed, dict):
+        return parsed
+    return {'message': raw}
 
 
 def market_is_open():
