@@ -440,6 +440,12 @@
       <!-- Active Models card + dead "Sync Zerodha Positions" button removed. -->
 
 
+  <div class="card" id="tv-alerts-card">
+    <div class="card-title">TradingView alerts</div>
+    <div class="muted" style="margin-bottom:8px">The last 10 alerts TradingView sent here and what happened to each. Tests never trade; the secret is hidden.</div>
+    <div class="table-wrap"><table><thead><tr><th>Time</th><th>Result</th><th>Signal</th><th>Price</th><th>Chart</th><th>Message received</th></tr></thead><tbody id="tv-alerts-tbody"></tbody></table></div>
+  </div>
+
   <div class="card" id="automation-log-card" style="display:none">
     <div class="card-title">Automation Log</div>
     <div id="automation-last-action" class="muted" style="margin-bottom:8px">No automation events yet.</div>
@@ -4052,6 +4058,26 @@ async function isCurrentUserAdmin(){
   return __isAdminCache;
 }
 
+function escHtml(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function refreshTradingViewAlerts(){
+  try {
+    const d = await apiFetch('/api/tradingview/recent?limit=10');
+    const tbody = document.getElementById('tv-alerts-tbody');
+    if(!tbody) return;
+    tbody.innerHTML = (d.alerts || []).map(a => {
+      const ok = a.result === 'Accepted' || a.result === 'Test — accepted';
+      const color = ok ? 'var(--pos, #1a8a4a)' : '#c0322b';
+      const res = '<span style="color:'+color+';font-weight:600">'+escHtml(a.result)+'</span>' + (a.reason ? '<div class="muted" style="font-size:11px">'+escHtml(a.reason)+'</div>' : '');
+      const chart = [a.symbol, a.timeframe ? a.timeframe + (/^\d+$/.test(a.timeframe) ? 'm' : '') : ''].filter(Boolean).join(' · ');
+      return '<tr><td style="white-space:nowrap">'+escHtml(a.time_ist)+'</td><td>'+res+'</td><td>'+escHtml(a.signal||'—')+'</td><td>'+escHtml(a.close==null?'—':a.close)+'</td><td style="white-space:nowrap">'+escHtml(chart||'—')+'</td>'
+        + '<td><code style="font-size:11px;word-break:break-all">'+escHtml(a.body||'')+'</code></td></tr>';
+    }).join('') || '<tr><td colspan="6" class="muted">No TradingView alerts received yet.</td></tr>';
+  } catch(e){}
+}
+
 async function refreshAutomationLogs(){
   try {
     const card = document.getElementById('automation-log-card');
@@ -4258,6 +4284,8 @@ loadTgChat();
 refreshTradingViewStatus();
 refreshAutomationStatus();
 refreshAutomationLogs();
+refreshTradingViewAlerts();
+setInterval(refreshTradingViewAlerts, 15000);
 setInterval(refreshZerodhaStatus, 30000);
 setInterval(refreshAutomationStatus, 10000);
 setInterval(refreshAutomationLogs, 15000);

@@ -2576,6 +2576,53 @@ def api_automation_status():
 
 
 
+@app.route("/api/tradingview/recent")
+def api_tradingview_recent():
+    """The last TradingView alerts the webhooks received and what became of each. Secrets are already masked."""
+    if "user_id" not in session:
+        return jsonify({"error": "login required"}), 401
+    limit = max(1, min(int(request.args.get("limit", "10")), 50))
+    conn = get_db(); cur = conn.cursor()
+    cur.execute(
+        "SELECT created_at, level, message, details FROM automation_log "
+        "WHERE message LIKE 'TradingView signal %' OR message LIKE 'TradingView TEST %' "
+        "OR message LIKE 'Rejected TradingView webhook%' OR message LIKE 'TradingView webhook error%' "
+        "ORDER BY id DESC LIMIT ?", (limit,))
+    rows = [dict(r) for r in cur.fetchall()]; conn.close()
+    out = []
+    for r in rows:
+        try:
+            d = json.loads(r.get("details") or "{}") or {}
+        except Exception:
+            d = {}
+        body = d.get("body") or ""
+        try:
+            parsed = json.loads(body) if body.startswith("{") else {}
+        except Exception:
+            parsed = {}
+        msg = r["message"]
+        if msg.startswith("TradingView TEST"):
+            result = "Test — accepted" if "ACCEPTED" in msg else "Test — rejected"
+            reason = msg.split("REJECTED: ", 1)[1] if "REJECTED: " in msg else ""
+        elif msg.startswith("Rejected"):
+            result, reason = "Rejected", msg.split(" — ", 1)[1] if " — " in msg else "invalid secret"
+        elif msg.startswith("TradingView webhook error"):
+            result, reason = "Error", msg.split(": ", 1)[1] if ": " in msg else ""
+        else:
+            result, reason = "Accepted", ""
+        out.append({
+            "time_ist": _to_ist_display(r["created_at"]),
+            "result": result,
+            "reason": reason,
+            "signal": parsed.get("signal") or (msg.split()[2] if result == "Accepted" else None),
+            "close": parsed.get("close"),
+            "symbol": parsed.get("symbol") or d.get("symbol"),
+            "timeframe": parsed.get("timeframe") or d.get("timeframe"),
+            "body": body,
+        })
+    return jsonify({"alerts": out})
+
+
 @app.route("/api/automation/logs")
 def api_automation_logs():
     # Admin-only: this feed includes internal stack traces / file paths from
@@ -3764,7 +3811,8 @@ def api_tradingview_webhook():
         refresh_master_state_from_db()
         log_automation(
             f"TradingView signal {signal} @ {spot} ({getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)')})",
-            details={"source": "TRADINGVIEW", "bar_time": bar_time, "symbol": payload.get("symbol") or payload.get("ticker"), "timeframe": payload.get("timeframe"), "supertrend": getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)')}
+            details={"source": "TRADINGVIEW", "bar_time": bar_time, "symbol": payload.get("symbol") or payload.get("ticker"), "timeframe": payload.get("timeframe"), "supertrend": getattr(models_v2, 'SIGNAL_SUPERTREND_LABEL', 'SuperTrend ATR 10 / Mult 3.0 (1H)'),
+                     "body": _tv_preview(payload)}
         )
         # Everything above this line is local bookkeeping and is already
         # done: the signal is persisted and the dashboard will show it. What
