@@ -1,10 +1,12 @@
 import models_v2
 from flask import Flask, render_template, request, jsonify, redirect, session
 from werkzeug.middleware.proxy_fix import ProxyFix
+import html
 import json
 import logging
 import math
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -311,6 +313,48 @@ def _tv_json_loads(raw: str):
             except Exception:
                 pass
         return None
+
+
+def _tv_preview(payload):
+    """What a webhook carried, with any secret masked, short enough for a log line."""
+    shown = {k: ("***" if k in ("secret", "token") else v) for k, v in payload.items()}
+    text = shown.get("message") if set(shown) == {"message"} else json.dumps(shown, default=str)
+    text = re.sub(r'("(?:secret|token)"\s*:\s*")[^"]*(")', r"\1***\2", str(text))
+    return text[:240]
+
+
+def _tv_check(payload, route):
+    """Secret check shared by the SuperTrend webhooks. Returns a response to send back, or None to carry on.
+
+    A body with "test": true is checked exactly like a real signal but never reaches the models."""
+    secret = str(payload.get("secret") or payload.get("token") or "").strip()
+    secret_ok = not TRADINGVIEW_WEBHOOK_SECRET or secret == TRADINGVIEW_WEBHOOK_SECRET
+    preview = _tv_preview(payload)
+    if str(payload.get("test", "")).strip().lower() in ("1", "true", "yes"):
+        problems = []
+        if not secret_ok:
+            problems.append("secret missing" if not secret else "secret does not match")
+        try:
+            normalize_signal(payload.get("signal") or payload.get("trend") or payload.get("side"))
+        except Exception as e:
+            problems.append(f"signal: {e}")
+        close = payload.get("close", payload.get("spot", payload.get("price")))
+        try:
+            float(close)
+        except (TypeError, ValueError):
+            problems.append("close missing or not a number")
+        ok = not problems
+        verdict = "would be ACCEPTED" if ok else "would be REJECTED: " + "; ".join(problems)
+        log_automation(f"TradingView TEST on {route} {verdict}", level="INFO" if ok else "WARNING",
+                       details={"remote_addr": request.remote_addr, "body": preview})
+        send_telegram(f"{'✅' if ok else '❌'} <b>TradingView test</b> ({route})\nA real alert {verdict}.\nNo trade was placed.")
+        return jsonify({"ok": ok, "test": True, "problems": problems})
+    if not secret_ok:
+        log_automation(f"Rejected TradingView webhook on {route} — {'no secret in the message' if not secret else 'secret does not match'}",
+                       level="WARNING", details={"remote_addr": request.remote_addr, "body": preview})
+        send_telegram(f"❌ <b>TradingView signal rejected</b> ({route})\n{'No secret in the message' if not secret else 'Secret does not match'} — no trade taken.\nReceived: {html.escape(preview[:160])}")
+        return jsonify({"ok": False, "error": "invalid_secret"}), 403
+    return None
 
 
 def parse_tradingview_payload():
@@ -3700,10 +3744,9 @@ def api_tradingview_webhook():
     try:
         refresh_master_state_from_db()
         payload = parse_tradingview_payload()
-        secret = str(payload.get("secret") or payload.get("token") or "").strip()
-        if TRADINGVIEW_WEBHOOK_SECRET and secret != TRADINGVIEW_WEBHOOK_SECRET:
-            log_automation("Rejected TradingView webhook with invalid secret", level="WARNING", details={"remote_addr": request.remote_addr})
-            return jsonify({"ok": False, "error": "invalid_secret"}), 403
+        checked = _tv_check(payload, "/api/tradingview/webhook")
+        if checked is not None:
+            return checked
         signal = normalize_signal(payload.get("signal") or payload.get("trend") or payload.get("side"))
         spot_raw = payload.get("close", payload.get("spot", payload.get("price")))
         if spot_raw is None:
@@ -5314,12 +5357,9 @@ def api_tradingview_workstation_webhook():
     try:
         refresh_master_state_from_db()
         payload = parse_tradingview_payload()
-        secret = str(payload.get("secret") or payload.get("token") or "").strip()
-        if TRADINGVIEW_WEBHOOK_SECRET and secret != TRADINGVIEW_WEBHOOK_SECRET:
-            log_automation("Rejected workstation webhook — invalid secret",
-                           level="WARNING",
-                           details={"remote_addr": request.remote_addr})
-            return jsonify({"ok": False, "error": "invalid_secret"}), 403
+        checked = _tv_check(payload, "/api/tradingview/workstation_webhook")
+        if checked is not None:
+            return checked
 
         signal = normalize_signal(payload.get("signal") or payload.get("trend") or payload.get("side"))
         spot_raw = payload.get("close", payload.get("spot", payload.get("price")))
