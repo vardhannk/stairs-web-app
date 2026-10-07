@@ -3806,6 +3806,7 @@ def api_tradingview_webhook():
             "nifty_lot_size": CURRENT_NIFTY_LOT_SIZE,
             "signal_source": "TRADINGVIEW",
             "signal_time": str(bar_time),
+            "signal_received_at": now_utc_iso(),
             "nifty_trade_date": date.today().isoformat(),
         })
         refresh_master_state_from_db()

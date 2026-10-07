@@ -60,6 +60,36 @@ class TestPrevailingDirection:
         app = _FakeApp({})
         assert models_v2._prevailing_workstation_direction(app) is None
 
+    def _tv_app(self, store, **ms):
+        app = _FakeApp(store)
+        app.master_state = ms
+        return app
+
+    def _ago(self, days):
+        from datetime import datetime, timedelta, timezone
+        return (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    def test_falls_back_to_recent_tradingview_signal(self):
+        app = self._tv_app({}, signal_source="TRADINGVIEW", nifty_trend="SHORT", signal_received_at=self._ago(2))
+        assert models_v2._prevailing_workstation_direction(app) == "SHORT"
+
+    def test_workstation_trade_beats_tradingview_signal(self):
+        store = {"strategy_bundle::ob_workstation": {"trades": [{"trend": "LONG", "status": "OPEN"}]}}
+        app = self._tv_app(store, signal_source="TRADINGVIEW", nifty_trend="SHORT", signal_received_at=self._ago(1))
+        assert models_v2._prevailing_workstation_direction(app) == "LONG"
+
+    def test_ignores_stale_tradingview_signal(self):
+        app = self._tv_app({}, signal_source="TRADINGVIEW", nifty_trend="LONG", signal_received_at=self._ago(20))
+        assert models_v2._prevailing_workstation_direction(app) is None
+
+    def test_ignores_signal_without_received_time(self):
+        app = self._tv_app({}, signal_source="TRADINGVIEW", nifty_trend="LONG", signal_time="2026-09-23T14:51:56Z")
+        assert models_v2._prevailing_workstation_direction(app) is None
+
+    def test_ignores_manual_signal(self):
+        app = self._tv_app({}, signal_source="MANUAL", nifty_trend="LONG", signal_received_at=self._ago(1))
+        assert models_v2._prevailing_workstation_direction(app) is None
+
 
 class TestSchedulersExist:
     def test_monday_and_tuesday_schedulers_defined(self):

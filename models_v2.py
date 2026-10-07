@@ -47,6 +47,7 @@ The `app_module` parameter is the imported app.py module — used to access:
 """
 
 from datetime import date as _date
+from datetime import datetime, timedelta, timezone
 import math
 import traceback
 
@@ -1007,11 +1008,35 @@ def handle_workstation_signal(app, signal, spot, signal_time):
     _process_model_signal(app, "ait_workstation", signal, spot, signal_time)
 
 
+NEXP_SIGNAL_MAX_AGE_DAYS = 14
+
+
+def _last_tradingview_direction(app):
+    """Direction of the last TradingView SuperTrend signal the webhook accepted, if it arrived in the last
+    NEXP_SIGNAL_MAX_AGE_DAYS. Signals stored before signal_received_at existed don't count."""
+    ms = getattr(app, "master_state", None) or {}
+    if str(ms.get("signal_source") or "").upper() != "TRADINGVIEW":
+        return None
+    t = str(ms.get("nifty_trend") or "").upper()
+    received = ms.get("signal_received_at")
+    if t not in ("LONG", "SHORT") or not received:
+        return None
+    try:
+        at = datetime.fromisoformat(str(received).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) - at > timedelta(days=NEXP_SIGNAL_MAX_AGE_DAYS):
+        return None
+    return t
+
+
 def _prevailing_workstation_direction(app):
     """Return the direction (LONG/SHORT) currently held by OB/AIT Workstation.
 
     Prevailing SuperTrend ATR 10/3 workstation signal — from open OBW (then AITW)
-    trade, else last closed OBW trade, else None.
+    trade, else last closed OBW trade, else the last recent TradingView signal, else None.
     """
     for module in ("ob_workstation", "ait_workstation"):
         data = app.kv_get(MODEL_CONFIG[module]["storage"], {}) or {}
@@ -1027,7 +1052,7 @@ def _prevailing_workstation_direction(app):
         t = str(trades[-1].get("trend", "")).upper()
         if t in ("LONG", "SHORT"):
             return t
-    return None
+    return _last_tradingview_direction(app)
 
 
 def scheduler_nexp_workstation_monday_entry(app):
