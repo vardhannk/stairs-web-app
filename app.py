@@ -1921,6 +1921,23 @@ def calc_payoff(state):
 
 # ─── Routes ──────────────────────────────────────────────────────────────────
 
+_live_spot_cache = {"at": 0.0, "ltp": 0.0}
+
+
+def _cached_live_nifty_spot(max_age_s=10):
+    """Live NIFTY 50 LTP for the dashboard (polled every 5s), cached so the poll
+    doesn't hit Zerodha each time. 0.0 when Kite is unavailable."""
+    now = time.time()
+    if now - _live_spot_cache["at"] < max_age_s:
+        return _live_spot_cache["ltp"]
+    ltp = 0.0
+    try:
+        kite = get_kite(require_token=True)
+        ltp = float(kite.ltp(["NSE:NIFTY 50"])["NSE:NIFTY 50"]["last_price"] or 0)
+    except Exception:
+        pass
+    _live_spot_cache.update(at=now, ltp=ltp)
+    return ltp
 
 
 @app.route("/api/master", methods=["GET", "POST"])
@@ -1950,6 +1967,7 @@ def api_master():
         "current_year": date.today().year,
         "nifty_lot_size": CURRENT_NIFTY_LOT_SIZE,
         "signal_time_ist": _to_ist_display(master_state.get("signal_time")),
+        "live_spot": _cached_live_nifty_spot(),
     }
     return jsonify(payload)
 

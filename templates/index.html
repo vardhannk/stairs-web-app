@@ -3196,9 +3196,11 @@ function renderMaster(d){
   const box = document.getElementById('master-signal');
   box.className = 'signal-box '+(d.nifty_trend==='LONG'?'long':'short');
   document.getElementById('sig-trend').textContent = d.nifty_trend;
-  document.getElementById('sig-spot').textContent = 'Rs.'+fmt(d.nifty_spot);
+  const live = +(d.live_spot || 0);
+  document.getElementById('sig-spot').textContent = 'Rs.'+fmt(live > 0 ? live : d.nifty_spot);
   const chgEl = document.getElementById('sig-change');
-  chgEl.textContent = d.nifty_trend === 'LONG' ? 'Bullish trend active' : 'Bearish trend active';
+  chgEl.textContent = (d.nifty_trend === 'LONG' ? 'Bullish trend active' : 'Bearish trend active')
+    + (live > 0 && d.nifty_spot ? ' · signal @ Rs.' + fmt(d.nifty_spot) : '');
   chgEl.className = 'signal-sub';
   // Auto-Computed Values card removed 2026-07-25 (display-only reference numbers).
   const tvEl = document.getElementById('tradingview-status-dashboard');
