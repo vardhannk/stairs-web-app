@@ -267,6 +267,8 @@
   <button data-module="automation" data-model="ait_workstation" onclick="goto('ait-workstation')"><span class="nav-label">🎯 Options AIT</span><span class="nav-badge" id="navbadge-ait_workstation"></span></button>
   <button data-module="automation" data-model="nexp_workstation" onclick="goto('nexp-workstation')"><span class="nav-label">🎯 Nifty EXP</span><span class="nav-badge" id="navbadge-nexp_workstation"></span></button>
   <button data-module="automation" data-model="nifty_strangle_w" onclick="goto('nifty-strangle-w')"><span class="nav-label">🎯 Nifty Strangle 3.5%</span><span class="nav-badge" id="navbadge-nifty_strangle_w"></span></button>
+  <button data-module="admin" data-model="vol_cluster" onclick="goto('vol-cluster')"><span class="nav-label">📈 VolCluster FUT</span><span class="nav-badge" id="navbadge-vol_cluster"></span></button>
+  <button data-module="admin" data-model="gc_options_buy" onclick="goto('gc-options-buy')"><span class="nav-label">🎯 GC Options Buy</span><span class="nav-badge" id="navbadge-gc_options_buy"></span></button>
   <div id="strategy-list"></div>
 </nav>
 
@@ -2466,6 +2468,181 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════ VOLCLUSTER FUT + GC OPTIONS BUY (admin) -->
+<style>
+.xm-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.xm-head h2{font-size:17px;margin:0}
+.xm-mode{font-size:10px;font-weight:700;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em}
+.xm-mode.live{background:#e3f4ea;color:#1a7f37}.xm-mode.paper{background:#e6f0fb;color:#2b5aa8}.xm-mode.off{background:#eef1f5;color:#8a92a0}
+.xm-sig{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.xm-dir{font-size:26px;font-weight:800;min-width:110px}
+.xm-dir.LONG,.xm-dir.CE{color:var(--green)}.xm-dir.SHORT,.xm-dir.PE{color:var(--red)}.xm-dir.FLAT{color:var(--muted)}
+.xm-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px 14px;flex:1;font-size:12px}
+.xm-kv b{display:block;font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.xm-cfg{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.xm-cfg label{display:block;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:3px}
+.xm-cfg input{background:#bdd7ee;border:1px solid #999;color:#1f4e79;font-weight:700;border-radius:4px;height:34px;width:130px;padding:0 10px}
+.xm-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.xm-acts .btn{padding:8px 16px}
+.xm-msg{font-size:12px;margin-top:8px;color:var(--muted);white-space:pre-wrap}
+.xm table{border-collapse:collapse;width:100%}
+.xm table th{background:#1f4e79;color:#fff;font-weight:600;font-size:11px;padding:7px 9px;white-space:nowrap;text-align:left}
+.xm table td{border-bottom:1px solid #e3e7ec;padding:6px 9px;font-size:12px;white-space:nowrap}
+.xm .switch{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;height:34px}
+</style>
+
+<div id="page-vol-cluster" class="page xm">
+  <div class="xm-head"><h2>📈 VolCluster Nifty Futures</h2><span class="xm-mode" id="vc-mode">—</span>
+    <span class="muted" style="font-size:12px">Adaptive SuperTrend A33 / B2.5 / C2 / S0.6 on closed 1H NIFTY bars · always in · holds overnight · switch Paper/Live on <a href="/go-live">Go-Live</a></span></div>
+  <div class="card">
+    <div class="card-title">Signal (last closed hour)</div>
+    <div class="xm-sig"><div class="xm-dir FLAT" id="vc-dir">—</div><div class="xm-kv" id="vc-sig-kv"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Settings &amp; actions</div>
+    <div class="xm-cfg">
+      <div><label>Capital (₹)</label><input type="number" id="vc-cap"/></div>
+      <div><label>Nifty at start</label><input type="number" id="vc-start"/></div>
+      <div><label>Leverage</label><input type="number" id="vc-lev" step="0.5"/></div>
+      <div><label>Lots</label><input type="number" id="vc-lots" min="1"/></div>
+      <div><label>Lot size</label><input type="number" id="vc-lot" min="1"/></div>
+      <div><label>Auto trade</label><div class="switch"><input type="checkbox" id="vc-auto"/> enter / flip on the ST</div></div>
+      <div><button class="btn btn-primary" onclick="saveVolCluster()">Save</button></div>
+    </div>
+    <div class="xm-acts">
+      <button class="btn btn-success" onclick="vcOrder('enter')">Enter</button>
+      <button class="btn btn-primary" onclick="vcOrder('flip')">Flip</button>
+      <button class="btn" style="background:var(--red);color:#fff" onclick="vcOrder('flat')">Flat</button>
+      <button class="btn" onclick="loadVolCluster()">Refresh</button>
+    </div>
+    <div class="xm-msg" id="vc-msg"></div>
+  </div>
+  <div class="card"><div class="card-title">Open position</div><div id="vc-pos" class="muted">—</div></div>
+  <div class="stats-row" id="vc-stats"></div>
+  <div class="card"><div class="card-title">Trade log</div><div class="table-wrap"><table id="vc-trades"></table></div></div>
+</div>
+
+<div id="page-gc-options-buy" class="page xm">
+  <div class="xm-head"><h2>🎯 GC Options Buy</h2><span class="xm-mode" id="gc-mode">—</span>
+    <span class="muted" style="font-size:12px">Golden Cross 15m (SMA 50/200 + Donchian 20 + EMA 20) · ATM CE/PE · one entry a day before 15:00 · switch Paper/Live on <a href="/go-live">Go-Live</a></span></div>
+  <div class="card">
+    <div class="card-title">Signal</div>
+    <div class="xm-sig"><div class="xm-dir FLAT" id="gc-dir">—</div><div class="xm-kv" id="gc-sig-kv"></div></div>
+    <div class="muted" id="gc-exits" style="font-size:11px;margin-top:10px"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Settings &amp; actions</div>
+    <div class="xm-cfg">
+      <div><label>Capital (₹)</label><input type="number" id="gc-cap"/></div>
+      <div><label>Lot size</label><input type="number" id="gc-lot" min="1"/></div>
+      <div><label>Auto daily</label><div class="switch"><input type="checkbox" id="gc-auto"/> enter on signal, manage exits</div></div>
+      <div><button class="btn btn-primary" onclick="saveGcob()">Save</button></div>
+    </div>
+    <div class="xm-acts">
+      <button class="btn btn-success" onclick="gcOrder('enter')">Enter</button>
+      <button class="btn" style="background:var(--red);color:#fff" onclick="gcOrder('flat')">Flat</button>
+      <button class="btn" onclick="loadGcob()">Refresh</button>
+    </div>
+    <div class="xm-msg" id="gc-msg"></div>
+  </div>
+  <div class="card"><div class="card-title">Open position</div><div id="gc-pos" class="muted">—</div></div>
+  <div class="stats-row" id="gc-stats"></div>
+  <div class="card"><div class="card-title">Trade log</div><div class="table-wrap"><table id="gc-trades"></table></div></div>
+</div>
+
+<script>
+function xmINR(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!isFinite(n)) return '—'; return (n<0?'-₹':'₹')+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:0}); }
+function xmPct(v){ if(v===null||v===undefined) return '—'; return (Number(v)*100).toFixed(2)+'%'; }
+function xmNum(v,d){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); return isFinite(n)?n.toLocaleString('en-IN',{maximumFractionDigits:d===undefined?2:d}):String(v); }
+function xmCls(v){ return Number(v)>0?'pos':Number(v)<0?'neg':''; }
+function xmKV(pairs){ return pairs.map(function(p){ return '<div><b>'+p[0]+'</b>'+p[1]+'</div>'; }).join(''); }
+function xmMode(id,mode){ var el=document.getElementById(id); mode=String(mode||'off'); el.textContent=mode; el.className='xm-mode '+mode; }
+function xmStats(id,s,extra){
+  var cells=[['Current capital',xmINR(s.curr_capital),''],['Returns',xmPct(s.return_on_cap),xmCls(s.return_on_cap)],
+    ['Open P&L',xmINR(s.open_pnl),xmCls(s.open_pnl)],['Max DD',xmPct(s.max_dd),'neg'],['Curr DD',xmPct(s.curr_dd),''],
+    ['Won / Lost',(s.won||0)+' / '+(s.lost||0),''],['Biggest win',xmINR(s.big_win),'pos'],['Biggest loss',xmINR(s.big_loss),'neg']].concat(extra||[]);
+  document.getElementById(id).innerHTML=cells.map(function(c){ return '<div class="stat"><div class="stat-label">'+c[0]+'</div><div class="stat-value '+c[2]+'" style="font-size:15px">'+c[1]+'</div></div>'; }).join('');
+}
+async function xmFetch(url,opts){
+  var r=await fetch(url,opts); var d={}; try{ d=await r.json(); }catch(e){}
+  if(!r.ok && !d.message) d.message=d.error||('HTTP '+r.status);
+  return d;
+}
+function xmPost(url,body){ return xmFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); }
+function xmResult(id,d){
+  var el=document.getElementById(id);
+  if(d.ok){ el.style.color='var(--green)'; el.textContent=(d.action?d.action.toUpperCase()+' done':'Done')+(d.order&&d.order.mode?' ('+d.order.mode+')':''); }
+  else { el.style.color='var(--red)'; el.textContent=d.message||'Failed'; }
+}
+
+async function loadVolCluster(){
+  var d=await xmFetch('/api/vol-cluster');
+  if(d.message && !d.config){ document.getElementById('vc-msg').textContent=d.message; return; }
+  var s=d.signal||{};
+  xmMode('vc-mode',d.mode);
+  var dir=document.getElementById('vc-dir'); dir.textContent=s.ok?s.direction:'—'; dir.className='xm-dir '+(s.ok?s.direction:'FLAT');
+  document.getElementById('vc-sig-kv').innerHTML=s.ok?xmKV([['Bar (IST)',s.bar_time],['ST line',xmNum(s.st)],['Close',xmNum(s.close)],
+    ['Multiplier',xmNum(s.mult)],['Cluster',s.cluster],['ATR',xmNum(s.atr)],['NIFTY spot',xmNum(s.spot)],
+    ['Futures',(s.futures_symbol||'—')+' '+xmNum(s.futures_ltp)],['Flip on this bar',s.signal_change?'Yes':'No']])
+    :'<div class="neg">'+(s.message||'Signal unavailable')+(d.connected?'':' — connect Zerodha on the Dashboard')+'</div>';
+  var c=d.config||{};
+  ['cap:capital','start:nifty_start','lev:leverage','lots:lots','lot:lot_size'].forEach(function(p){ var a=p.split(':'); var el=document.getElementById('vc-'+a[0]); if(document.activeElement!==el) el.value=c[a[1]]; });
+  document.getElementById('vc-auto').checked=!!c.auto_trade;
+  var p=d.open_position, sz=d.sizing||{};
+  document.getElementById('vc-pos').innerHTML=p?xmKV([['Side','<span class="tag-'+String(p.side).toLowerCase()+'">'+p.side+'</span>'],['Contract',p.contract],
+    ['Entry',xmNum(p.entry)],['Qty',p.qty],['Mark',xmNum(d.mark)],['Open P&L','<span class="'+xmCls(d.summary.open_pnl)+'">'+xmINR(d.summary.open_pnl)+'</span>'],
+    ['Since',p.entry_date],['Mode',p.mode]]):'Flat · next entry size '+(sz.qty||'—')+' qty · min capital for 2 lots '+xmINR(sz.min_capital_2lots);
+  xmStats('vc-stats',d.summary||{});
+  var rows=(d.trades||[]).map(function(t,i){ return '<tr><td>'+((d.trades.length)-i)+'</td><td>'+t.entry_date+'</td><td><span class="tag-'+String(t.trend).toLowerCase()+'">'+t.trend+'</span></td><td>'+xmNum(t.entry)+'</td><td>'+t.action+'</td><td>'+t.qty+'</td><td>'+xmNum(t.exit)+'</td><td>'+t.exit_date+'</td><td class="'+xmCls(t.pnl)+'">'+xmINR(t.pnl)+'</td><td>'+xmINR(t.running_cap)+'</td><td class="'+xmCls(t.net_pts)+'">'+xmNum(t.net_pts)+'</td><td>'+xmPct(t.drawdown)+'</td><td>'+(t.contract||'')+'</td><td>'+(t.mode||'')+'</td></tr>'; }).join('');
+  document.getElementById('vc-trades').innerHTML='<thead><tr><th>#</th><th>Entry date</th><th>Trend</th><th>Entry</th><th>Action</th><th>Qty</th><th>Exit</th><th>Exit date</th><th>P&amp;L</th><th>Capital</th><th>Net pts</th><th>Drawdown</th><th>Contract</th><th>Mode</th></tr></thead><tbody>'+(rows||'<tr><td colspan="14" class="muted" style="text-align:center;padding:14px">No closed trades in this book yet.</td></tr>')+'</tbody>';
+}
+async function saveVolCluster(){
+  var v=function(id){ return Number(document.getElementById(id).value); };
+  var d=await xmPost('/api/vol-cluster/config',{capital:v('vc-cap'),nifty_start:v('vc-start'),leverage:v('vc-lev'),lots:v('vc-lots'),lot_size:v('vc-lot'),auto_trade:document.getElementById('vc-auto').checked});
+  xmResult('vc-msg',d.ok?{ok:true,action:'save'}:d); loadVolCluster();
+}
+async function vcOrder(action){
+  var mode=document.getElementById('vc-mode').textContent;
+  if(!confirm(action.toUpperCase()+' VolCluster ('+mode.toUpperCase()+')?'+(mode==='live'?'\n\nThis places a REAL Zerodha order.':''))) return;
+  document.getElementById('vc-msg').textContent='Working…';
+  xmResult('vc-msg',await xmPost('/api/vol-cluster/order',{action:action})); loadVolCluster();
+}
+
+async function loadGcob(){
+  var d=await xmFetch('/api/gc-options-buy');
+  if(d.message && !d.config){ document.getElementById('gc-msg').textContent=d.message; return; }
+  xmMode('gc-mode',d.mode);
+  var dir=document.getElementById('gc-dir'); dir.textContent=d.ok?d.signal:'—'; dir.className='xm-dir '+(d.ok?d.signal:'FLAT');
+  document.getElementById('gc-sig-kv').innerHTML=d.ok?xmKV([['Bar (IST)',d.bar_time],['Regime',d.regime],['Entry',d.allow_entry?'<span class="pos">Allowed</span>':(d.entry_blocked_reason||'—')],
+    ['Spot',xmNum(d.spot)],['ATM strike',d.atm_strike],['Expiry',d.expiry||'—'],['VIX',xmNum(d.vix)],['Risk',d.risk_pct+'%'],
+    ['SMA 50 / 200',xmNum(d.sma_fast,0)+' / '+xmNum(d.sma_slow,0)],['Donchian',xmNum(d.don_low,0)+' – '+xmNum(d.don_high,0)],['EMA 20',xmNum(d.ema20)]])
+    :'<div class="neg">'+(d.message||'Signal unavailable')+(d.connected?'':' — connect Zerodha on the Dashboard')+'</div>';
+  document.getElementById('gc-exits').textContent=(d.exits||[]).join(' · ');
+  var c=d.config||{};
+  if(document.activeElement!==document.getElementById('gc-cap')) document.getElementById('gc-cap').value=c.capital;
+  if(document.activeElement!==document.getElementById('gc-lot')) document.getElementById('gc-lot').value=c.lot_size;
+  document.getElementById('gc-auto').checked=!!c.auto_daily;
+  var p=d.open_position;
+  document.getElementById('gc-pos').innerHTML=p?xmKV([['Option',(p.tradingsymbol||(p.strike+' '+p.type))],['Entry',xmNum(p.entry)],['Qty',p.qty+(p.partial_booked?' (T1 booked)':'')],
+    ['Mark',xmNum(d.mark_premium)],['Open P&L','<span class="'+xmCls(d.summary.open_pnl)+'">'+xmINR(d.summary.open_pnl)+'</span>'],['TP1 / TP2',xmNum(p.partial_tp_price)+' / '+xmNum(p.final_tp_price)],
+    ['Trail stop',xmNum(p.trailing_stop)],['Mode',p.mode]]):'Flat'+(d.summary&&d.summary.last_entry_date?' · last entry '+d.summary.last_entry_date:'');
+  var s=d.summary||{};
+  xmStats('gc-stats',s,[['Win ratio',xmPct(s.win_ratio),''],['Avg win',xmINR(s.avg_win),'pos'],['Avg loss',xmINR(s.avg_loss),'neg']]);
+  var rows=(d.trades||[]).map(function(t,i){ return '<tr><td>'+((d.trades.length)-i)+'</td><td>'+t.entry_date+'</td><td>'+xmNum(t.spot)+'</td><td>'+t.expiry+'</td><td>'+xmNum(t.strike,0)+' '+t.type+'</td><td>'+xmNum(t.entry)+'</td><td>'+t.qty+'</td><td>'+xmNum(t.exit)+'</td><td class="'+xmCls(t.pnl)+'">'+xmINR(t.pnl)+'</td><td>'+xmINR(t.running_cap)+'</td><td>'+xmPct(t.drawdown)+'</td><td>'+(t.exit_reason||'')+'</td><td>'+(t.mode||'')+'</td></tr>'; }).join('');
+  document.getElementById('gc-trades').innerHTML='<thead><tr><th>#</th><th>Date</th><th>Spot</th><th>Expiry</th><th>Strike</th><th>Entry</th><th>Qty</th><th>Exit</th><th>P&amp;L</th><th>Capital</th><th>Drawdown</th><th>Exit reason</th><th>Mode</th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="muted" style="text-align:center;padding:14px">No closed trades in this book yet.</td></tr>')+'</tbody>';
+}
+async function saveGcob(){
+  var d=await xmPost('/api/gc-options-buy/config',{capital:Number(document.getElementById('gc-cap').value),lot_size:Number(document.getElementById('gc-lot').value),auto_daily:document.getElementById('gc-auto').checked});
+  xmResult('gc-msg',d.ok?{ok:true,action:'save'}:d); loadGcob();
+}
+async function gcOrder(action){
+  var mode=document.getElementById('gc-mode').textContent;
+  if(!confirm(action.toUpperCase()+' GC Options Buy ('+mode.toUpperCase()+')?'+(mode==='live'?'\n\nThis places a REAL Zerodha order.':''))) return;
+  document.getElementById('gc-msg').textContent='Working…';
+  xmResult('gc-msg',await xmPost('/api/gc-options-buy/order',{action:action})); loadGcob();
+}
+</script>
+
 <script>
 // ---------------------------- navigation
 const pages = document.querySelectorAll('.page');
@@ -2491,6 +2668,8 @@ function goto(id){
   if(id==='orb') loadORB();
   if(id==='backtest') initBacktestCharts();
   if(id==='futures') loadFutures();
+  if(id==='vol-cluster') loadVolCluster();
+  if(id==='gc-options-buy') loadGcob();
   var _nv=document.querySelector('nav'); if(_nv) _nv.classList.remove('open');  // close mobile drawer after navigating
 }
 function openSidebar(){ var n=document.querySelector('nav'); var s=document.getElementById('nav-scrim'); if(n)n.classList.add('open'); if(s)s.classList.add('show'); }
@@ -2536,7 +2715,7 @@ async function updateNavBadges(){
     window.__modelModes=modes;
     if(!(window.__liveModels&&window.__liveModels.has)) window.__liveModels=liveSet;
     else liveSet.forEach(function(m){window.__liveModels.add(m);});
-    ['futures','ob_workstation','ait_workstation','nexp_workstation','nifty_strangle_w'].forEach(function(mdl){
+    ['futures','ob_workstation','ait_workstation','nexp_workstation','nifty_strangle_w','vol_cluster','gc_options_buy'].forEach(function(mdl){
       var el=document.getElementById('navbadge-'+mdl); if(!el) return;
       var mode=String(modes[mdl]||'off').toLowerCase();
       if(liveSet.has(mdl)) mode='live';

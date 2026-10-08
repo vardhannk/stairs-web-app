@@ -1,4 +1,7 @@
 import models_v2
+import kite_feed
+import vol_cluster
+import gc_options_buy
 from flask import Flask, render_template, request, jsonify, redirect, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 import html
@@ -516,7 +519,11 @@ def create_order_payload(symbol, transaction_type, quantity):
 # To take a model live: add it to live_enabled_models (persisted in kv), e.g.
 # via POST /api/automation/live_models. Default = only futures.
 # ============================================================================
-KNOWN_LIVE_MODELS = ("futures", "ob_workstation", "ait_workstation", "nexp_workstation", "nifty_strangle_w")
+KNOWN_LIVE_MODELS = ("futures", "ob_workstation", "ait_workstation", "nexp_workstation", "nifty_strangle_w",
+                     "vol_cluster", "gc_options_buy")
+# Moved from STAIRS: run on the admin's own account only, with their own books
+# (vol_cluster.py / gc_options_buy.py), not strategy_bundle trades.
+ADMIN_BOOK_MODELS = ("vol_cluster", "gc_options_buy")
 DEFAULT_LIVE_ENABLED_MODELS = ["futures"]
 
 # Which tier-access module a user needs to CONTROL (switch off/paper/live) each
@@ -528,6 +535,8 @@ MODEL_ACCESS_MODULE = {
     "ait_workstation": "automation",
     "nexp_workstation": "automation",
     "nifty_strangle_w": "automation",
+    "vol_cluster": "admin",
+    "gc_options_buy": "admin",
 }
 
 # Per-model execution mode:
@@ -541,6 +550,8 @@ DEFAULT_MODEL_MODES = {
     "ait_workstation":   "paper",
     "nexp_workstation":  "paper",
     "nifty_strangle_w":  "paper",   # new strategy — starts in paper per go-live request
+    "vol_cluster":       "paper",
+    "gc_options_buy":    "paper",
 }
 
 def _modes_key(user_id=None):
@@ -663,6 +674,8 @@ def apply_phase_transition(model, prev_mode, new_mode, user_id=None):
       off -> paper/live: restore that phase's stash
     Nothing is ever deleted — switching back always brings the trades back.
     """
+    if model in ADMIN_BOOK_MODELS:
+        return  # separate paper/live books already; the mode picks which one
     def phase_of(m):
         return "live" if m == "live" else ("paper" if m == "paper" else None)
     new_ph = phase_of(new_mode)
@@ -715,7 +728,8 @@ def _model_from_reason(reason):
     r = str(reason or "").lower()
     if r.startswith("futures"):
         return "futures"
-    for m in ("nifty_strangle_w", "nexp_workstation", "ob_workstation", "ait_workstation"):
+    for m in ("nifty_strangle_w", "nexp_workstation", "ob_workstation", "ait_workstation",
+              "vol_cluster", "gc_options_buy"):
         if m in r:
             return m
     return None
@@ -2887,6 +2901,14 @@ def _open_positions_by_model(user_id=None):
     """Count OPEN trades per model (used by the deactivation modal). Per-user if given."""
     out = {}
     for m in KNOWN_LIVE_MODELS:
+        if m in ADMIN_BOOK_MODELS:
+            try:
+                owner = kite_feed.owner_user_id()
+                mine = user_id is None or owner is None or str(user_id) == str(owner)
+                out[m] = _admin_book_module(m).open_count() if mine else 0
+            except Exception:
+                out[m] = 0
+            continue
         key = read_bundle_key(m, user_id) if user_id else ("strategy_bundle::" + m)
         data = kv_get(key, {}) or {}
         trades = data.get("trades", []) or []
@@ -2966,6 +2988,13 @@ def squareoff_model_open_positions(model, user_id=None):
     """Kill & Exit: close a model's open positions using the account's ACTUAL
     broker net quantities (falling back to recorded qty), then mark them CLOSED.
     Call while the model is still Live so orders are permitted."""
+    if model in ADMIN_BOOK_MODELS:
+        owner = kite_feed.owner_user_id()
+        if user_id is not None and owner is not None and str(user_id) != str(owner):
+            return 0
+        n = _admin_book_module(model).kill_exit()
+        log_automation(f"{model}: kill-exit closed {n} position(s)", level="INFO")
+        return n
     key = read_bundle_key(model, user_id) if user_id else ("strategy_bundle::" + model)
     data = kv_get(key, {}) or {}
     trades = data.get("trades", []) or []
@@ -3036,6 +3065,8 @@ LIVE_MODEL_META = {
     "ait_workstation":  {"label": "AIT Workstation",      "strategy": "Credit spread (ATM/OTM)",            "capital": "₹5,00,000",   "risk": "10%"},
     "nexp_workstation": {"label": "NiftyEXP Workstation", "strategy": "Weekly credit spread · Mon→Tue",     "capital": "₹5,00,000",   "risk": "12%"},
     "nifty_strangle_w": {"label": "Nifty Strangle 3.5%",  "strategy": "Short strangle 3.5% OTM · Wed 9:20→15:38", "capital": "₹10,00,000", "risk": "10%"},
+    "vol_cluster":      {"label": "VolCluster FUT",       "strategy": "NIFTY futures · VolCluster ST 1H, always in · admin account", "capital": "₹5,00,000", "risk": "1 lot"},
+    "gc_options_buy":   {"label": "GC Options Buy",       "strategy": "ATM CE/PE buy · Golden Cross 15m, intraday · admin account", "capital": "₹5,00,000", "risk": "5–15% (VIX)"},
 }
 LIVE_MODEL_LABELS = {k: v["label"] for k, v in LIVE_MODEL_META.items()}
 
@@ -5504,6 +5535,119 @@ def api_ait_workstation():
                         "archive": paper_phase_archive(data)})
     except Exception as e:
         return jsonify({"trades": [], "config": {}, "summary": {}, "error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VolCluster FUT + GC Options Buy (moved from STAIRS) — admin account only
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _admin_book_module(model):
+    return vol_cluster if model == "vol_cluster" else gc_options_buy
+
+
+def _admin_book_call(fn, *args, **kwargs):
+    _deny = _require_admin_json()
+    if _deny:
+        return _deny
+    try:
+        return jsonify(fn(*args, **kwargs))
+    except Exception as e:
+        log_automation(f"{getattr(fn, '__module__', '')}.{getattr(fn, '__name__', '')} error: {e}", level="ERROR",
+                       details={"traceback": traceback.format_exc()})
+        return jsonify({"ok": False, "message": str(e)}), 500
+
+
+def _vol_cluster_view():
+    sig = vol_cluster.signal()
+    return {"signal": sig, **vol_cluster.panel(), "connected": kite_feed.connected()}
+
+
+@app.route("/api/vol-cluster", methods=["GET"])
+def api_vol_cluster():
+    return _admin_book_call(_vol_cluster_view)
+
+
+@app.route("/api/vol-cluster/config", methods=["POST"])
+def api_vol_cluster_config():
+    return _admin_book_call(lambda: {"ok": True, "config": vol_cluster.set_config(request.get_json(silent=True) or {})})
+
+
+@app.route("/api/vol-cluster/order", methods=["POST"])
+def api_vol_cluster_order():
+    action = (request.get_json(silent=True) or {}).get("action")
+    return _admin_book_call(lambda: vol_cluster.place_action(action))
+
+
+@app.route("/api/vol-cluster/tick", methods=["POST"])
+def api_vol_cluster_tick():
+    return _admin_book_call(vol_cluster.auto_tick)
+
+
+@app.route("/api/gc-options-buy", methods=["GET"])
+def api_gc_options_buy():
+    return _admin_book_call(lambda: {**gc_options_buy.panel(), "connected": kite_feed.connected()})
+
+
+@app.route("/api/gc-options-buy/config", methods=["POST"])
+def api_gc_options_buy_config():
+    return _admin_book_call(lambda: {"ok": True, "config": gc_options_buy.set_config(request.get_json(silent=True) or {})})
+
+
+@app.route("/api/gc-options-buy/order", methods=["POST"])
+def api_gc_options_buy_order():
+    action = (request.get_json(silent=True) or {}).get("action")
+    if action == "enter":
+        return _admin_book_call(lambda: gc_options_buy.enter_from_signal(force=False))
+    if action == "flat":
+        return _admin_book_call(lambda: gc_options_buy.flat_position("Flat"))
+    return jsonify({"ok": False, "message": "action must be enter | flat"}), 400
+
+
+@app.route("/api/gc-options-buy/tick", methods=["POST"])
+def api_gc_options_buy_tick():
+    return _admin_book_call(gc_options_buy.daily_tick)
+
+
+_QUIET_PHASES = {"hold", "idle_auto_off", "model_off", "outside_session", "flat_no_signal",
+                 "past_cutoff", "pre_open", "weekend", "flat", "no_entry"}
+
+
+def admin_book_models_job():
+    """VolCluster auto-tick every 5 min; GC daily-tick every 60s while a position
+    is open (exit management), else every 5 min. IST weekdays 09:00–15:59 only."""
+    time.sleep(60)
+    next_vc = next_gc = 0.0
+    while True:
+        try:
+            now = datetime.now(APP_TZ)
+            if now.weekday() < 5 and 9 <= now.hour <= 15 and not automation_state.get("kill_switch"):
+                t = time.time()
+                if t >= next_vc:
+                    next_vc = t + 300
+                    res = vol_cluster.auto_tick()
+                    if res.get("phase") not in _QUIET_PHASES:
+                        log_automation(f"VolCluster tick: {res.get('phase')} {res.get('message') or ''}".strip(),
+                                       level="INFO" if res.get("ok") else "ERROR", details=res)
+                if t >= next_gc:
+                    next_gc = t + 60
+                    res = gc_options_buy.daily_tick()
+                    next_gc = t + (60 if gc_options_buy.get_open_position() else 300)
+                    if res.get("phase") not in _QUIET_PHASES:
+                        log_automation(f"GC Options Buy tick: {res.get('phase')} {res.get('message') or ''}".strip(),
+                                       level="INFO" if res.get("ok") else "ERROR", details=res)
+        except Exception as e:
+            log_automation(f"admin_book_models_job error: {e}", level="ERROR",
+                           details={"traceback": traceback.format_exc()})
+        time.sleep(20)
+
+
+def ensure_admin_book_thread():
+    if getattr(ensure_admin_book_thread, "_started", False):
+        return
+    threading.Thread(target=admin_book_models_job, name="admin-book-models", daemon=True).start()
+    ensure_admin_book_thread._started = True
+
+ensure_admin_book_thread()
 
 
 if __name__ == "__main__":
