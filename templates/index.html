@@ -2524,7 +2524,6 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
       <div class="config-group"><label>Lot Size</label><input type="number" id="vc-lot" min="1"/></div>
       <div class="config-group"><label>Qty</label><div class="stat-value neu" id="vc-qty-disp" style="font-size:15px">—</div></div>
       <div class="config-group"><label>Min Capital for 2 Lots</label><div class="stat-value neu" id="vc-mincap-disp" style="font-size:15px">—</div></div>
-      <div class="config-group"><label>Auto Trade</label><label style="display:flex;align-items:center;gap:6px;height:34px;font-size:12px;text-transform:none"><input type="checkbox" id="vc-auto" style="width:auto;height:auto"/> enter / flip on the ST</label></div>
       <div class="config-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="saveVolCluster()">Save</button></div>
     </div>
     <div class="stats-row" id="vc-summary"></div>
@@ -2608,7 +2607,6 @@ async function loadVolCluster(){
     :'<div class="neg">'+(s.message||'Signal unavailable')+(d.connected?'':' — connect Zerodha on the Dashboard')+'</div>';
   var c=d.config||{};
   ['cap:capital','start:nifty_start','lev:leverage','lots:lots','lot:lot_size'].forEach(function(p){ var a=p.split(':'); var el=document.getElementById('vc-'+a[0]); if(document.activeElement!==el) el.value=c[a[1]]; });
-  document.getElementById('vc-auto').checked=!!c.auto_trade;
   var p=d.open_position, sz=d.sizing||{}, sm=d.summary||{};
   document.getElementById('vc-qty-disp').textContent=sz.qty||'—';
   document.getElementById('vc-mincap-disp').textContent=sz.min_capital_2lots?inr(sz.min_capital_2lots):'—';
@@ -2672,7 +2670,7 @@ async function loadVolCluster(){
 }
 async function saveVolCluster(){
   var v=function(id){ return Number(document.getElementById(id).value); };
-  var d=await xmPost('/api/vol-cluster/config',{capital:v('vc-cap'),nifty_start:v('vc-start'),leverage:v('vc-lev'),lots:v('vc-lots'),lot_size:v('vc-lot'),auto_trade:document.getElementById('vc-auto').checked});
+  var d=await xmPost('/api/vol-cluster/config',{capital:v('vc-cap'),nifty_start:v('vc-start'),leverage:v('vc-lev'),lots:v('vc-lots'),lot_size:v('vc-lot')});
   xmResult('vc-msg',d.ok?{ok:true,action:'save'}:d); loadVolCluster();
 }
 async function vcOrder(action){

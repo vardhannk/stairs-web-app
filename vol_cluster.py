@@ -34,7 +34,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "leverage": 2.0,
     "lot_size": 65,
     "lots": 1,
-    "auto_trade": False,
 }
 
 
@@ -250,7 +249,7 @@ def _load(ph: str | None = None) -> dict[str, Any]:
         if ph == "live":
             paper = kf.A().kv_get(book_key("paper"), None)
             if isinstance(paper, dict) and isinstance(paper.get("config"), dict):
-                data["config"] = {**dict(paper["config"]), "auto_trade": False}
+                data["config"] = dict(paper["config"])
     cfg = dict(DEFAULT_CONFIG)
     for k, v in (data.get("config") or {}).items():
         if k in DEFAULT_CONFIG:
@@ -285,8 +284,6 @@ def set_config(updates: dict[str, Any]) -> dict[str, Any]:
             cfg[k] = float(v)
         elif k in ("lot_size", "lots"):
             cfg[k] = max(1, int(v))
-        elif k == "auto_trade":
-            cfg[k] = bool(v)
     state["config"] = cfg
     if not state["trades"] and state["open_position"] is None:
         state["peak_capital"] = float(cfg["capital"])
@@ -574,8 +571,6 @@ def auto_tick() -> dict[str, Any]:
     stamp = now.strftime("%H:%M:%S")
     if kf.model_mode(MODEL) == "off":
         return {"ok": True, "phase": "model_off", "now_ist": stamp}
-    if not get_config().get("auto_trade"):
-        return {"ok": True, "phase": "idle_auto_off", "now_ist": stamp}
     hhmm = now.hour * 100 + now.minute
     if now.weekday() >= 5 or hhmm < 920 or hhmm > 1530:
         return {"ok": True, "phase": "outside_session", "now_ist": stamp}
