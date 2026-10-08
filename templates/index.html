@@ -2491,24 +2491,28 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
 .xm .switch{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;height:34px}
 </style>
 
-<div id="page-vol-cluster" class="page xm">
+<div id="page-vol-cluster" class="page">
   <div class="xm-head"><h2>📈 VolCluster Nifty Futures</h2><span class="xm-mode" id="vc-mode">—</span>
     <span class="muted" style="font-size:12px">Adaptive SuperTrend A33 / B2.5 / C2 / S0.6 on closed 1H NIFTY bars · always in · holds overnight · switch Paper/Live on <a href="/go-live">Go-Live</a></span></div>
   <div class="card">
-    <div class="card-title">Signal (last closed hour)</div>
-    <div class="xm-sig"><div class="xm-dir FLAT" id="vc-dir">—</div><div class="xm-kv" id="vc-sig-kv"></div></div>
+    <div class="card-title">Configuration</div>
+    <div class="note" style="margin-bottom:10px">Enter the Nifty Futures price at start; Min Capital for 2 Lots is derived — keep capital a multiple of it. Changes apply after Save.</div>
+    <div class="config-row">
+      <div class="config-group"><label>Enter Capital (₹)</label><input type="number" id="vc-cap"/></div>
+      <div class="config-group"><label>Nifty Futures at Start</label><input type="number" id="vc-start"/></div>
+      <div class="config-group"><label>Leverage</label><input type="number" id="vc-lev" step="0.5"/></div>
+      <div class="config-group"><label>Lots</label><input type="number" id="vc-lots" min="1"/></div>
+      <div class="config-group"><label>Lot Size</label><input type="number" id="vc-lot" min="1"/></div>
+      <div class="config-group"><label>Qty</label><div class="stat-value neu" id="vc-qty-disp" style="font-size:15px">—</div></div>
+      <div class="config-group"><label>Min Capital for 2 Lots</label><div class="stat-value neu" id="vc-mincap-disp" style="font-size:15px">—</div></div>
+      <div class="config-group"><label>Auto Trade</label><label style="display:flex;align-items:center;gap:6px;height:34px;font-size:12px;text-transform:none"><input type="checkbox" id="vc-auto" style="width:auto;height:auto"/> enter / flip on the ST</label></div>
+      <div class="config-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="saveVolCluster()">Save</button></div>
+    </div>
+    <div class="stats-row" id="vc-summary"></div>
   </div>
   <div class="card">
-    <div class="card-title">Settings &amp; actions</div>
-    <div class="xm-cfg">
-      <div><label>Capital (₹)</label><input type="number" id="vc-cap"/></div>
-      <div><label>Nifty at start</label><input type="number" id="vc-start"/></div>
-      <div><label>Leverage</label><input type="number" id="vc-lev" step="0.5"/></div>
-      <div><label>Lots</label><input type="number" id="vc-lots" min="1"/></div>
-      <div><label>Lot size</label><input type="number" id="vc-lot" min="1"/></div>
-      <div><label>Auto trade</label><div class="switch"><input type="checkbox" id="vc-auto"/> enter / flip on the ST</div></div>
-      <div><button class="btn btn-primary" onclick="saveVolCluster()">Save</button></div>
-    </div>
+    <div class="card-title">Signal (last closed hour) &amp; Actions</div>
+    <div class="xm-sig"><div class="xm-dir FLAT" id="vc-dir">—</div><div class="xm-kv" id="vc-sig-kv"></div></div>
     <div class="xm-acts">
       <button class="btn btn-success" onclick="vcOrder('enter')">Enter</button>
       <button class="btn btn-primary" onclick="vcOrder('flip')">Flip</button>
@@ -2517,9 +2521,17 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
     </div>
     <div class="xm-msg" id="vc-msg"></div>
   </div>
-  <div class="card"><div class="card-title">Open position</div><div id="vc-pos" class="muted">—</div></div>
-  <div class="stats-row" id="vc-stats"></div>
-  <div class="card"><div class="card-title">Trade log</div><div class="table-wrap"><table id="vc-trades"></table></div></div>
+  <div class="card">
+    <div class="card-title">Trades</div>
+    <div class="table-wrap">
+      <table><thead><tr>
+        <th>#</th><th>Date entry</th><th>Trend</th><th>Entry</th><th>Reversal / Rollover</th><th>Action</th><th>Qty</th>
+        <th>Exit Level</th><th>Exit Date</th><th>Profit / Loss</th><th>Current Capital</th><th>Net points</th>
+        <th>Max capital</th><th>Drawdown</th><th>Trade Returns</th><th>New Peak</th>
+      </tr></thead>
+      <tbody id="vc-tbody"></tbody></table>
+    </div>
+  </div>
 </div>
 
 <div id="page-gc-options-buy" class="page xm">
@@ -2588,13 +2600,66 @@ async function loadVolCluster(){
   var c=d.config||{};
   ['cap:capital','start:nifty_start','lev:leverage','lots:lots','lot:lot_size'].forEach(function(p){ var a=p.split(':'); var el=document.getElementById('vc-'+a[0]); if(document.activeElement!==el) el.value=c[a[1]]; });
   document.getElementById('vc-auto').checked=!!c.auto_trade;
-  var p=d.open_position, sz=d.sizing||{};
-  document.getElementById('vc-pos').innerHTML=p?xmKV([['Side','<span class="tag-'+String(p.side).toLowerCase()+'">'+p.side+'</span>'],['Contract',p.contract],
-    ['Entry',xmNum(p.entry)],['Qty',p.qty],['Mark',xmNum(d.mark)],['Open P&L','<span class="'+xmCls(d.summary.open_pnl)+'">'+xmINR(d.summary.open_pnl)+'</span>'],
-    ['Since',p.entry_date],['Mode',p.mode]]):'Flat · next entry size '+(sz.qty||'—')+' qty · min capital for 2 lots '+xmINR(sz.min_capital_2lots);
-  xmStats('vc-stats',d.summary||{});
-  var rows=(d.trades||[]).map(function(t,i){ return '<tr><td>'+((d.trades.length)-i)+'</td><td>'+t.entry_date+'</td><td><span class="tag-'+String(t.trend).toLowerCase()+'">'+t.trend+'</span></td><td>'+xmNum(t.entry)+'</td><td>'+t.action+'</td><td>'+t.qty+'</td><td>'+xmNum(t.exit)+'</td><td>'+t.exit_date+'</td><td class="'+xmCls(t.pnl)+'">'+xmINR(t.pnl)+'</td><td>'+xmINR(t.running_cap)+'</td><td class="'+xmCls(t.net_pts)+'">'+xmNum(t.net_pts)+'</td><td>'+xmPct(t.drawdown)+'</td><td>'+(t.contract||'')+'</td><td>'+(t.mode||'')+'</td></tr>'; }).join('');
-  document.getElementById('vc-trades').innerHTML='<thead><tr><th>#</th><th>Entry date</th><th>Trend</th><th>Entry</th><th>Action</th><th>Qty</th><th>Exit</th><th>Exit date</th><th>P&amp;L</th><th>Capital</th><th>Net pts</th><th>Drawdown</th><th>Contract</th><th>Mode</th></tr></thead><tbody>'+(rows||'<tr><td colspan="14" class="muted" style="text-align:center;padding:14px">No closed trades in this book yet.</td></tr>')+'</tbody>';
+  var p=d.open_position, sz=d.sizing||{}, sm=d.summary||{};
+  document.getElementById('vc-qty-disp').textContent=sz.qty||'—';
+  document.getElementById('vc-mincap-disp').textContent=sz.min_capital_2lots?inr(sz.min_capital_2lots):'—';
+
+  var trades=(d.trades||[]).slice().reverse();
+  var pnls=trades.map(function(t){ return toNumber(t.pnl); });
+  var wins=pnls.filter(function(v){ return v>0; }), losses=pnls.filter(function(v){ return v<0; });
+  var sum=function(a){ return a.reduce(function(x,y){ return x+y; },0); };
+  var grossWin=sum(wins), grossLoss=Math.abs(sum(losses));
+  var pf=grossLoss?grossWin/grossLoss:(grossWin?Infinity:0);
+  var pts=trades.map(function(t){ return toNumber(t.net_pts); });
+  var rets=trades.map(function(t){ return toNumber(t.trade_return)*100; });
+  var avgGain=wins.length?grossWin/wins.length:0, avgLoss=losses.length?sum(losses)/losses.length:0;
+  var winRatio=trades.length?wins.length/trades.length*100:0;
+  var ret=toNumber(sm.return_on_cap)*100, maxDd=-toNumber(sm.max_dd)*100, currDd=-toNumber(sm.curr_dd)*100;
+  document.getElementById('vc-summary').innerHTML=
+    makeStat('Spot', s.ok?fmt(s.spot):'—','neu')+
+    makeStat('Futures', s.ok?fmt(s.futures_ltp):'—','neu')+
+    makeStat('Lot Size', c.lot_size||'—','neu')+
+    makeStat('Curr cap', inr(sm.curr_capital),'neu')+
+    makeStat('Returns', pct(ret), cls(ret))+
+    makeStat('Open P&L', p?inr(sm.open_pnl):'—', cls(toNumber(sm.open_pnl)))+
+    makeStat('Max DD', pct(maxDd), cls(maxDd))+
+    makeStat('Trades Won', wins.length,'pos')+
+    makeStat('Trades Lost', losses.length, losses.length?'neg':'')+
+    makeStat('Win Ratio', pct(winRatio), cls(winRatio-50))+
+    makeStat('Avg Gain', inr(avgGain),'pos')+
+    makeStat('Avg Loss', inr(avgLoss), losses.length?'neg':'')+
+    makeStat('Profit Factor', isFinite(pf)?pf.toFixed(2):'∞','neu')+
+    makeStat('Points Gain', sum(pts.filter(function(v){ return v>0; })).toFixed(2),'neu')+
+    makeStat('Curr DD', pct(currDd), cls(currDd))+
+    makeStat('Tot Points', sum(pts).toFixed(2),'neu')+
+    makeStat('Biggest Win', pct(rets.length?Math.max.apply(null,rets):0),'pos')+
+    makeStat('Biggest Loss', pct(rets.length?Math.min.apply(null,rets):0), losses.length?'neg':'');
+
+  var futContract=function(sym){ var m=String(sym||'').match(/NIFTY(\d{2})([A-Z]{3})FUT/i); return m?('NIFTY '+m[2].toUpperCase()+' FUT'):''; };
+  var peak=toNumber(c.capital);
+  var rows=trades.map(function(t,i){
+    var rc=toNumber(t.running_cap), isNewPeak=rc>=peak; if(rc>peak) peak=rc;
+    return '<tr><td>'+(i+1)+'</td><td>'+fmtDate(t.entry_date)+'</td>'+
+      '<td class="'+(t.trend==='LONG'?'pos':'neg')+'" style="font-weight:bold">'+t.trend+'</td>'+
+      '<td>'+fmt(toNumber(t.entry))+'</td><td>'+(futContract(t.contract)||t.action||'')+'</td>'+
+      '<td>'+(t.trend==='LONG'?'BUY':'SELL')+'</td><td>'+fmt(toNumber(t.qty))+'</td>'+
+      '<td>'+fmt(toNumber(t.exit))+'</td><td>'+fmtDate(t.exit_date)+'</td>'+
+      '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+inr(t.running_cap)+'</td>'+
+      '<td class="'+cls(toNumber(t.net_pts))+'">'+fmt(toNumber(t.net_pts))+'</td><td>'+inr(t.peak)+'</td>'+
+      '<td class="'+cls(-toNumber(t.drawdown))+'">'+(toNumber(t.drawdown)*100).toFixed(2)+'%</td>'+
+      '<td class="'+cls(toNumber(t.trade_return))+'">'+pct(toNumber(t.trade_return)*100)+'</td>'+
+      '<td class="peak">'+(isNewPeak?'New Peak':'')+'</td></tr>';
+  });
+  if(p){
+    var op=toNumber(sm.open_pnl);
+    rows.push('<tr style="background:#fffbe6"><td>'+(trades.length+1)+'</td><td>'+fmtDate(p.entry_date)+'</td>'+
+      '<td class="'+(p.side==='LONG'?'pos':'neg')+'" style="font-weight:bold">'+p.side+'</td>'+
+      '<td>'+fmt(toNumber(p.entry))+'</td><td>'+(futContract(p.contract)||p.contract||'')+'</td>'+
+      '<td>'+(p.side==='LONG'?'BUY':'SELL')+'</td><td>'+fmt(toNumber(p.qty))+'</td>'+
+      '<td class="muted">Open · '+(d.mark?fmt(toNumber(d.mark)):'—')+'</td><td></td>'+
+      '<td class="'+cls(op)+'">'+inr(op)+'</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>');
+  }
+  document.getElementById('vc-tbody').innerHTML=rows.join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No trades in this book yet.</td></tr>';
 }
 async function saveVolCluster(){
   var v=function(id){ return Number(document.getElementById(id).value); };
