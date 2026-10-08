@@ -2488,12 +2488,31 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
 .xm table{border-collapse:collapse;width:100%}
 .xm table th{background:#1f4e79;color:#fff;font-weight:600;font-size:11px;padding:7px 9px;white-space:nowrap;text-align:left}
 .xm table td{border-bottom:1px solid #e3e7ec;padding:6px 9px;font-size:12px;white-space:nowrap}
+.vc-info{position:relative;display:inline-flex}
+.vc-i{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--muted);background:#fff;color:var(--muted);font:italic 700 11px Georgia,serif;line-height:1;padding:0;cursor:pointer}
+.vc-i:hover{border-color:#2b5aa8;color:#2b5aa8}
+.vc-pop{display:none;position:absolute;top:26px;left:0;z-index:50;width:min(720px,88vw);background:#fff;border:1px solid #d8dee6;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:14px 16px}
+.vc-pop.open{display:block}
+.vc-pop-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
 .xm .switch{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;height:34px}
 </style>
 
 <div id="page-vol-cluster" class="page">
   <div class="xm-head"><h2>📈 VolCluster Nifty Futures</h2><span class="xm-mode" id="vc-mode">—</span>
-    <span class="muted" style="font-size:12px">Adaptive SuperTrend A33 / B2.5 / C2 / S0.6 on closed 1H NIFTY bars · always in · holds overnight · switch Paper/Live on <a href="/go-live">Go-Live</a></span></div>
+    <span class="vc-info"><button type="button" class="vc-i" id="vc-i" onclick="event.stopPropagation();document.getElementById('vc-pop').classList.toggle('open')" title="Signal &amp; actions">i</button>
+      <div class="vc-pop" id="vc-pop" onclick="event.stopPropagation()">
+        <div class="vc-pop-title">Signal (last closed hour)</div>
+        <div class="xm-sig"><div class="xm-dir FLAT" id="vc-dir">—</div><div class="xm-kv" id="vc-sig-kv"></div></div>
+        <div class="muted" style="font-size:11px;margin-top:8px">Adaptive SuperTrend A33 / B2.5 / C2 / S0.6 on closed 1H NIFTY bars · always in · holds overnight · switch Paper/Live on <a href="/go-live">Go-Live</a></div>
+        <div class="xm-acts">
+          <button class="btn btn-success" onclick="vcOrder('enter')">Enter</button>
+          <button class="btn btn-primary" onclick="vcOrder('flip')">Flip</button>
+          <button class="btn" style="background:var(--red);color:#fff" onclick="vcOrder('flat')">Flat</button>
+          <button class="btn" onclick="loadVolCluster()">Refresh</button>
+        </div>
+        <div class="xm-msg" id="vc-msg"></div>
+      </div>
+    </span></div>
   <div class="card">
     <div class="card-title">Configuration</div>
     <div class="note" style="margin-bottom:10px">Enter the Nifty Futures price at start; Min Capital for 2 Lots is derived — keep capital a multiple of it. Changes apply after Save.</div>
@@ -2509,17 +2528,6 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
       <div class="config-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="saveVolCluster()">Save</button></div>
     </div>
     <div class="stats-row" id="vc-summary"></div>
-  </div>
-  <div class="card">
-    <div class="card-title">Signal (last closed hour) &amp; Actions</div>
-    <div class="xm-sig"><div class="xm-dir FLAT" id="vc-dir">—</div><div class="xm-kv" id="vc-sig-kv"></div></div>
-    <div class="xm-acts">
-      <button class="btn btn-success" onclick="vcOrder('enter')">Enter</button>
-      <button class="btn btn-primary" onclick="vcOrder('flip')">Flip</button>
-      <button class="btn" style="background:var(--red);color:#fff" onclick="vcOrder('flat')">Flat</button>
-      <button class="btn" onclick="loadVolCluster()">Refresh</button>
-    </div>
-    <div class="xm-msg" id="vc-msg"></div>
   </div>
   <div class="card">
     <div class="card-title">Trades</div>
@@ -2587,6 +2595,7 @@ function xmResult(id,d){
   else { el.style.color='var(--red)'; el.textContent=d.message||'Failed'; }
 }
 
+document.addEventListener('click', function(){ var p=document.getElementById('vc-pop'); if(p) p.classList.remove('open'); });
 async function loadVolCluster(){
   var d=await xmFetch('/api/vol-cluster');
   if(d.message && !d.config){ document.getElementById('vc-msg').textContent=d.message; return; }
