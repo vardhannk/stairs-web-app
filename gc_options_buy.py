@@ -41,7 +41,7 @@ ENTRY_CUTOFF = dtime(15, 0)
 EOD_SQUARE = dtime(15, 25)
 DEFAULT_VIX = 16.0
 
-DEFAULT_CONFIG: dict[str, Any] = {"capital": 500_000.0, "lot_size": 65, "auto_daily": False}
+DEFAULT_CONFIG: dict[str, Any] = {"capital": 500_000.0, "lot_size": 65}
 
 
 # ── signal ────────────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ def _load(ph: str | None = None) -> dict[str, Any]:
         if ph == "live":
             paper = kf.A().kv_get(book_key("paper"), None)
             if isinstance(paper, dict) and isinstance(paper.get("config"), dict):
-                data["config"] = {**dict(paper["config"]), "auto_daily": False}
+                data["config"] = dict(paper["config"])
     cfg = dict(DEFAULT_CONFIG)
     for k, v in (data.get("config") or {}).items():
         if k in DEFAULT_CONFIG:
@@ -241,8 +241,6 @@ def set_config(updates: dict[str, Any]) -> dict[str, Any]:
             cfg[k] = float(v)
         elif k == "lot_size":
             cfg[k] = max(1, int(v))
-        elif k == "auto_daily":
-            cfg[k] = bool(v)
     state["config"] = cfg
     if capital_changed or (not state["trades"] and state["open_position"] is None):
         state["peak_capital"] = _peak_from_path(state)
@@ -630,7 +628,7 @@ def manage_open_exits() -> dict[str, Any]:
 
 
 def daily_tick() -> dict[str, Any]:
-    """Open → manage exits. Flat + auto_daily + CE/PE before 15:00 + not entered today → Enter."""
+    """Open → manage exits. Flat + CE/PE before 15:00 + not entered today → Enter."""
     now = kf.now_ist()
     stamp = now.strftime("%H:%M:%S")
     if kf.model_mode(MODEL) == "off":
@@ -640,8 +638,6 @@ def daily_tick() -> dict[str, Any]:
     if get_open_position():
         return manage_open_exits()
     t = now.time().replace(tzinfo=None)
-    if not get_config().get("auto_daily"):
-        return {"ok": True, "phase": "idle_auto_off", "now_ist": stamp}
     if t >= ENTRY_CUTOFF:
         return {"ok": True, "phase": "past_cutoff", "now_ist": stamp}
     if t < dtime(9, 20):

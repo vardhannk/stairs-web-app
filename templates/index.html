@@ -2554,7 +2554,6 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
     <div class="xm-cfg">
       <div><label>Capital (₹)</label><input type="number" id="gc-cap"/></div>
       <div><label>Lot size</label><input type="number" id="gc-lot" min="1"/></div>
-      <div><label>Auto daily</label><div class="switch"><input type="checkbox" id="gc-auto"/> enter on signal, manage exits</div></div>
       <div><button class="btn btn-primary" onclick="saveGcob()">Save</button></div>
     </div>
     <div class="xm-acts">
@@ -2693,7 +2692,6 @@ async function loadGcob(){
   var c=d.config||{};
   if(document.activeElement!==document.getElementById('gc-cap')) document.getElementById('gc-cap').value=c.capital;
   if(document.activeElement!==document.getElementById('gc-lot')) document.getElementById('gc-lot').value=c.lot_size;
-  document.getElementById('gc-auto').checked=!!c.auto_daily;
   var p=d.open_position;
   document.getElementById('gc-pos').innerHTML=p?xmKV([['Option',(p.tradingsymbol||(p.strike+' '+p.type))],['Entry',xmNum(p.entry)],['Qty',p.qty+(p.partial_booked?' (T1 booked)':'')],
     ['Mark',xmNum(d.mark_premium)],['Open P&L','<span class="'+xmCls(d.summary.open_pnl)+'">'+xmINR(d.summary.open_pnl)+'</span>'],['TP1 / TP2',xmNum(p.partial_tp_price)+' / '+xmNum(p.final_tp_price)],
@@ -2704,7 +2702,7 @@ async function loadGcob(){
   document.getElementById('gc-trades').innerHTML='<thead><tr><th>#</th><th>Date</th><th>Spot</th><th>Expiry</th><th>Strike</th><th>Entry</th><th>Qty</th><th>Exit</th><th>P&amp;L</th><th>Capital</th><th>Drawdown</th><th>Exit reason</th><th>Mode</th></tr></thead><tbody>'+(rows||'<tr><td colspan="13" class="muted" style="text-align:center;padding:14px">No closed trades in this book yet.</td></tr>')+'</tbody>';
 }
 async function saveGcob(){
-  var d=await xmPost('/api/gc-options-buy/config',{capital:Number(document.getElementById('gc-cap').value),lot_size:Number(document.getElementById('gc-lot').value),auto_daily:document.getElementById('gc-auto').checked});
+  var d=await xmPost('/api/gc-options-buy/config',{capital:Number(document.getElementById('gc-cap').value),lot_size:Number(document.getElementById('gc-lot').value)});
   xmResult('gc-msg',d.ok?{ok:true,action:'save'}:d); loadGcob();
 }
 async function gcOrder(action){
