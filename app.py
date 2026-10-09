@@ -329,7 +329,8 @@ def _tv_preview(payload):
 def _tv_check(payload, route):
     """Secret check shared by the SuperTrend webhooks. Returns a response to send back, or None to carry on.
 
-    A body with "test": true is checked exactly like a real signal but never reaches the models."""
+    A body with "test": true is checked exactly like a real signal but never reaches the models. Its result is
+    logged (dashboard "TradingView alerts") but not sent to Telegram, which is kept for flips, closes and warnings."""
     secret = str(payload.get("secret") or payload.get("token") or "").strip()
     secret_ok = not TRADINGVIEW_WEBHOOK_SECRET or secret == TRADINGVIEW_WEBHOOK_SECRET
     preview = _tv_preview(payload)
@@ -350,7 +351,6 @@ def _tv_check(payload, route):
         verdict = "would be ACCEPTED" if ok else "would be REJECTED: " + "; ".join(problems)
         log_automation(f"TradingView TEST on {route} {verdict}", level="INFO" if ok else "WARNING",
                        details={"remote_addr": request.remote_addr, "body": preview})
-        send_telegram(f"{'✅' if ok else '❌'} <b>TradingView test</b> ({route})\nA real alert {verdict}.\nNo trade was placed.")
         return jsonify({"ok": ok, "test": True, "problems": problems})
     if not secret_ok:
         log_automation(f"Rejected TradingView webhook on {route} — {'no secret in the message' if not secret else 'secret does not match'}",
