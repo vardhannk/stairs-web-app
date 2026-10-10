@@ -2602,8 +2602,8 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
   </div>
   <div class="card" id="ar-log-card" style="display:none">
     <div class="card-title">Experiment log <span class="muted" style="font-weight:400">· search period only, kept = improved the score</span></div>
-    <div class="table-wrap"><table><thead><tr>
-      <th>#</th><th>Experiment</th><th>CAGR</th><th>Max DD</th><th>Status</th>
+    <div class="table-wrap"><table><thead id="ar-log-head"><tr>
+      <th data-k="n">#</th><th data-k="description">Experiment</th><th data-k="cagr">CAGR</th><th data-k="max_dd">Max DD</th><th data-k="status">Status</th>
     </tr></thead><tbody id="ar-log"></tbody></table></div>
   </div>
   <div class="card" id="ar-test-card" style="display:none">
@@ -2790,9 +2790,8 @@ async function loadAutoresearchLab(){
         '<td>'+pc(s.dev.cagr)+'</td><td>'+pc(s.dev.max_dd)+'</td><td>'+pc(s.test.cagr)+'</td><td>'+pc(s.test.max_dd)+'</td>'+
         '<td>'+pc(s.all.cagr)+'</td><td>'+pc(s.all.max_dd)+'</td><td class="'+cls(toNumber(s.all.worst_trade))+'">'+inr(s.all.worst_trade)+'</td>'+
         '<td class="'+(s.passes?'pos':'neg')+'" style="font-weight:bold">'+(s.passes?'Yes':'No')+'</td></tr>'; }).join('');
-    document.getElementById('ar-log').innerHTML=(r.experiments||[]).map(function(e,i){
-      return '<tr><td>'+(i+1)+'</td><td>'+e.description+'</td><td>'+pc(e.cagr)+'</td><td>'+pc(e.max_dd)+'</td>'+
-        '<td class="'+(e.status==='keep'?'pos':'muted')+'" style="font-weight:bold">'+e.status+'</td></tr>'; }).join('');
+    arLogRows=(r.experiments||[]).map(function(e,i){ return Object.assign({n:i+1},e); });
+    renderArLog();
     document.getElementById('ar-test-label').textContent='· '+(r.test_trades_label||'');
     document.getElementById('ar-test').innerHTML=(r.test_trades||[]).map(function(t,i){
       return '<tr><td>'+(i+1)+'</td><td>'+fmtDate(t.entry)+'</td><td>'+fmtDate(t.exit)+'</td><td>'+t.lots+'</td>'+
@@ -2810,6 +2809,29 @@ async function loadAutoresearchLab(){
       '<td class="'+cls(toNumber(t.gross_pnl))+'">'+inr(t.gross_pnl)+'</td><td>'+inr(t.charges)+'</td>'+
       '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+fmtDate(t.exit_date)+'</td></tr>';
   }).join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No closed paper trades yet — tracking starts '+fmtDate(c.start_date)+'.</td></tr>';
+}
+var arLogRows=[], arLogSort={k:'n',dir:1};
+function renderArLog(){
+  var k=arLogSort.k, dir=arLogSort.dir;
+  var rows=arLogRows.slice().sort(function(a,b){
+    var x=a[k], y=b[k];
+    if(typeof x==='string') return dir*x.localeCompare(y);
+    return dir*(x-y);
+  });
+  document.querySelectorAll('#ar-log-head th').forEach(function(th){
+    var label=th.textContent.replace(/ [▲▼]$/,'');
+    th.style.cursor='pointer'; th.style.userSelect='none'; th.title='Click to sort';
+    th.textContent=label+(th.dataset.k===k?(dir>0?' ▲':' ▼'):'');
+    th.onclick=function(){
+      arLogSort=arLogSort.k===th.dataset.k?{k:arLogSort.k,dir:-arLogSort.dir}
+        :{k:th.dataset.k,dir:(th.dataset.k==='n'||th.dataset.k==='description')?1:-1};
+      renderArLog();
+    };
+  });
+  var pc=function(v){ return '<span class="'+cls(toNumber(v))+'">'+pct(toNumber(v)*100)+'</span>'; };
+  document.getElementById('ar-log').innerHTML=rows.map(function(e){
+    return '<tr><td>'+e.n+'</td><td>'+e.description+'</td><td>'+pc(e.cagr)+'</td><td>'+pc(e.max_dd)+'</td>'+
+      '<td class="'+(e.status==='keep'?'pos':'muted')+'" style="font-weight:bold">'+e.status+'</td></tr>'; }).join('');
 }
 async function saveAutoresearchLab(){
   var v=function(id){ return document.getElementById(id).value; };
