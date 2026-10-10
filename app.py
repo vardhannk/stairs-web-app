@@ -3,6 +3,7 @@ import kite_feed
 import vol_cluster
 import gc_options_buy
 import strangle_lab
+import autoresearch_lab
 from flask import Flask, render_template, request, jsonify, redirect, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 import html
@@ -5623,6 +5624,16 @@ def api_strangle_lab_config():
     return _admin_book_call(lambda: {"ok": True, "config": strangle_lab.set_config(request.get_json(silent=True) or {})})
 
 
+@app.route("/api/autoresearch-lab", methods=["GET"])
+def api_autoresearch_lab():
+    return _admin_book_call(lambda: {**autoresearch_lab.panel(), "connected": kite_feed.connected()})
+
+
+@app.route("/api/autoresearch-lab/config", methods=["POST"])
+def api_autoresearch_lab_config():
+    return _admin_book_call(lambda: {"ok": True, "config": autoresearch_lab.set_config(request.get_json(silent=True) or {})})
+
+
 _QUIET_PHASES = {"hold", "idle_auto_off", "model_off", "outside_session", "flat_no_signal",
                  "past_cutoff", "pre_open", "weekend", "flat", "no_entry"}
 
@@ -5652,14 +5663,15 @@ def admin_book_models_job():
                                        level="INFO" if res.get("ok") else "ERROR", details=res)
                 if t >= next_sl:
                     next_sl = t + 60
-                    try:
-                        res = strangle_lab.tick(now)
-                        if res.get("phase") not in _QUIET_PHASES | {"entered", "exited"}:
-                            log_automation(f"Strangle Lab tick: {res.get('phase')} {res.get('message') or ''}".strip(),
-                                           level="WARNING", details=res)
-                    except Exception as e:
-                        log_automation(f"Strangle Lab tick error: {e}", level="ERROR",
-                                       details={"traceback": traceback.format_exc()})
+                    for lab_label, lab in (("Strangle Lab", strangle_lab), ("Autoresearch Lab", autoresearch_lab)):
+                        try:
+                            res = lab.tick(now)
+                            if res.get("phase") not in _QUIET_PHASES | {"entered", "exited"}:
+                                log_automation(f"{lab_label} tick: {res.get('phase')} {res.get('message') or ''}".strip(),
+                                               level="WARNING", details=res)
+                        except Exception as e:
+                            log_automation(f"{lab_label} tick error: {e}", level="ERROR",
+                                           details={"traceback": traceback.format_exc()})
         except Exception as e:
             log_automation(f"admin_book_models_job error: {e}", level="ERROR",
                            details={"traceback": traceback.format_exc()})

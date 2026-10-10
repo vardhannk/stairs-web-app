@@ -1,0 +1,212 @@
+"""Autoresearch Lab — paper-only forward tracking of the strangle strategies
+found by the autoresearch backtest loop (strangle_autoresearch repo).
+
+Each strategy sells a current-weekly CE and PE at fixed % OTM from the 09:20
+NIFTY spot, entering on the Nth trading session after the previous expiry
+(0 = the day after expiry, 1 = the session after that) and holding to expiry
+with no stop. Sizing matches the backtest: every strategy compounds its own
+equity from ₹10L, lots = floor(equity / margin_per_lot).
+
+Prices are Kite LTPs on the admin account. No order function is ever called.
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta
+from typing import Any
+
+import kite_feed as kf
+import strangle_lab as sl
+
+BOOK_KEY = "autoresearch_lab::book"
+RESEARCH_KEY = "autoresearch_lab::research"
+LABEL = "Autoresearch Lab"
+
+STRATEGIES = [
+    {"id": "thu25", "entry_offset": 1, "ce_pct": 2.5, "pe_pct": 2.5, "label": "Thu · 2.5% / 2.5% (recommended)"},
+    {"id": "thu30", "entry_offset": 1, "ce_pct": 3.0, "pe_pct": 3.0, "label": "Thu · 3.0% / 3.0% (safer)"},
+    {"id": "thu2520", "entry_offset": 1, "ce_pct": 2.5, "pe_pct": 2.0, "label": "Thu · CE 2.5% / PE 2.0% (search winner)"},
+    {"id": "wed35", "entry_offset": 0, "ce_pct": 3.5, "pe_pct": 3.5, "label": "Wed · 3.5% / 3.5% (live rules)"},
+]
+
+_warned = {"no_token": None}
+
+DEFAULT_CONFIG = {
+    "capital": 1_000_000,
+    "margin_per_lot": 190_000,
+    "lot_size": 65,
+    "start_date": "2026-10-14",
+    "end_date": "2027-04-14",
+}
+
+
+def _load() -> dict[str, Any]:
+    data = kf.A().kv_get(BOOK_KEY, None) or {}
+    cfg = {**DEFAULT_CONFIG, **(data.get("config") or {})}
+    books = data.get("books") or {}
+    for s in STRATEGIES:
+        books.setdefault(s["id"], {"open": None, "trades": [], "last_entry_date": None})
+    return {"config": cfg, "books": books}
+
+
+def _save(state: dict[str, Any]) -> None:
+    kf.A().kv_set(BOOK_KEY, state)
+
+
+def set_config(updates: dict[str, Any]) -> dict[str, Any]:
+    state = _load()
+    cfg = state["config"]
+    for k in ("capital", "margin_per_lot", "lot_size"):
+        if k in updates and updates[k] not in ("", None):
+            cfg[k] = int(float(updates[k]))
+    for k in ("start_date", "end_date"):
+        if updates.get(k) and kf.parse_date(updates[k]):
+            cfg[k] = str(updates[k])[:10]
+    _save(state)
+    return cfg
+
+
+def _equity(cfg: dict[str, Any], book: dict[str, Any]) -> float:
+    return float(cfg["capital"]) + sum(float(t.get("pnl") or 0) for t in book["trades"])
+
+
+def session_offset(today: str, current_expiry: str) -> int | None:
+    """Which trading session after the previous expiry `today` is (0-based).
+    Weekly expiries fall on Tuesday, or the trading day before it on a
+    holiday, so the previous expiry is the last session on/before the nominal
+    Tuesday one week before this expiry's nominal Tuesday."""
+    bars = kf.index_bars(kf.NIFTY_TOKEN, "day", 20, max_age_s=300)
+    if bars.empty:
+        return None
+    sessions = sorted({d.strftime("%Y-%m-%d") for d in bars.index})
+    if today not in sessions:
+        sessions.append(today)
+    cur = date.fromisoformat(current_expiry)
+    nominal = cur + timedelta(days=(1 - cur.weekday()) % 7)
+    cutoff = (nominal - timedelta(days=7)).isoformat()
+    prior = [d for d in sessions if d <= cutoff]
+    if not prior:
+        return None
+    after = [d for d in sessions if prior[-1] < d <= today]
+    return len(after) - 1
+
+
+def enter_due(now: datetime) -> dict[str, Any]:
+    today = now.strftime("%Y-%m-%d")
+    state = _load()
+    cfg = state["config"]
+    if not (cfg["start_date"] <= today <= cfg["end_date"]):
+        return {"ok": True, "phase": "no_entry"}
+    waiting = [s for s in STRATEGIES if not state["books"][s["id"]]["open"]
+               and state["books"][s["id"]].get("last_entry_date") != today]
+    if not waiting:
+        return {"ok": True, "phase": "hold"}
+    if not kf.connected():
+        if _warned["no_token"] == today:
+            return {"ok": True, "phase": "hold"}
+        _warned["no_token"] = today
+        return {"ok": False, "phase": "no_token", "message": "Zerodha not connected — Autoresearch Lab entry skipped"}
+    expiry = sl.upcoming_expiries(1)[0]
+    if expiry <= today:
+        return {"ok": True, "phase": "no_entry"}
+    offset = session_offset(today, expiry)
+    due = [s for s in waiting if s["entry_offset"] == offset]
+    if not due:
+        return {"ok": True, "phase": "no_entry"}
+    spot = kf.nifty_spot()
+    if spot <= 0:
+        return {"ok": False, "phase": "no_spot", "message": "Autoresearch Lab: could not read NIFTY spot"}
+    opened, failed = [], []
+    for s in due:
+        book = state["books"][s["id"]]
+        lots = int(_equity(cfg, book) // float(cfg["margin_per_lot"]))
+        if lots <= 0:
+            failed.append(f"{s['id']}: equity below one lot of margin")
+            continue
+        try:
+            legs = {}
+            for key, opt, side, pct in (("ce", "CE", "+", s["ce_pct"]), ("pe", "PE", "-", s["pe_pct"])):
+                c = sl._contract(opt, sl.otm_strike(spot, pct, side), expiry)
+                px = kf.nfo_ltp(c["tradingsymbol"])
+                if px <= 0:
+                    raise RuntimeError(f"no LTP for {c['tradingsymbol']}")
+                legs[key] = {"tradingsymbol": c["tradingsymbol"], "strike": int(c["strike"]),
+                             "option_type": opt, "entry_price": round(px, 2), "exit_price": None}
+        except Exception as e:
+            failed.append(f"{s['id']}: {e}")
+            continue
+        book["open"] = {"variant": s["id"], "entry_date": today, "entry_time": now.strftime("%H:%M"),
+                        "spot": round(spot, 2), "expiry": expiry, "exit_on": expiry, "lots": lots,
+                        "qty": lots * int(cfg["lot_size"]), "status": "OPEN", "legs": legs}
+        book["last_entry_date"] = today
+        opened.append(s["id"])
+    _save(state)
+    if opened:
+        kf.log(f"{LABEL}: opened {', '.join(opened)} @ spot {spot:.2f}", details={"failed": failed})
+    if failed:
+        kf.log(f"{LABEL}: entry failed for {'; '.join(failed)}", level="WARNING")
+    return {"ok": not failed, "phase": "entered" if opened else "no_entry", "opened": opened, "failed": failed}
+
+
+def exit_due(now: datetime) -> dict[str, Any]:
+    today = now.strftime("%Y-%m-%d")
+    hhmm = now.hour * 100 + now.minute
+    state = _load()
+    closed = []
+    for sid, book in state["books"].items():
+        t = book.get("open")
+        if not t:
+            continue
+        if t["exit_on"] == today and 1531 <= hhmm <= 1538:
+            px = {k: kf.nfo_ltp(l["tradingsymbol"]) for k, l in t["legs"].items()}
+            if not all(p > 0 for p in px.values()):
+                continue
+            prices, reason = px, "expiry_squareoff"
+        elif t["exit_on"] < today:
+            prices, reason = sl._settle_expired(t), "expiry_settlement"
+            if prices is None:
+                continue
+        else:
+            continue
+        sl._close_trade(t, prices, reason, today)
+        book["trades"].append(t)
+        book["open"] = None
+        closed.append(sid)
+    if closed:
+        _save(state)
+        kf.log(f"{LABEL}: closed {', '.join(closed)}")
+    return {"ok": True, "phase": "exited" if closed else "hold", "closed": closed}
+
+
+def tick(now: datetime | None = None) -> dict[str, Any]:
+    """Called every ~60s from the admin book loop (IST weekdays 09:00–15:59)."""
+    now = now or kf.now_ist()
+    res = exit_due(now)
+    hhmm = now.hour * 100 + now.minute
+    if 920 <= hhmm <= 935:
+        res = enter_due(now)
+    return res
+
+
+def panel(with_marks: bool = True) -> dict[str, Any]:
+    state = _load()
+    cfg = state["config"]
+    out = []
+    for s in STRATEGIES:
+        book = state["books"][s["id"]]
+        t = book.get("open")
+        open_view = None
+        if t:
+            open_view = dict(t)
+            if with_marks and kf.connected():
+                try:
+                    marks = {k: kf.nfo_ltp(l["tradingsymbol"]) for k, l in t["legs"].items()}
+                    if all(m > 0 for m in marks.values()):
+                        open_view["open_pnl"] = round(sum((float(l["entry_price"]) - marks[k]) * int(t["qty"])
+                                                          for k, l in t["legs"].items()), 2)
+                except Exception:
+                    pass
+        summary = sl._summary(book["trades"], float(cfg["capital"]))
+        summary["equity"] = round(_equity(cfg, book), 2)
+        out.append({**s, "open": open_view, "trades": book["trades"], "summary": summary})
+    return {"ok": True, "config": cfg, "strategies": out, "research": kf.A().kv_get(RESEARCH_KEY, None)}

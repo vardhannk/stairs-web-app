@@ -270,6 +270,7 @@
   <button data-module="admin" data-model="vol_cluster" onclick="goto('vol-cluster')"><span class="nav-label">📈 VolCluster FUT</span><span class="nav-badge" id="navbadge-vol_cluster"></span></button>
   <button data-module="admin" data-model="gc_options_buy" onclick="goto('gc-options-buy')"><span class="nav-label">🎯 GC Options Buy</span><span class="nav-badge" id="navbadge-gc_options_buy"></span></button>
   <button data-module="admin" onclick="goto('strangle-lab')"><span class="nav-label">🧪 Strangle Lab</span><span class="nav-badge paper">PAPER</span></button>
+  <button data-module="admin" onclick="goto('autoresearch-lab')"><span class="nav-label">🤖 Autoresearch Lab</span><span class="nav-badge paper">PAPER</span></button>
   <div id="strategy-list"></div>
 </nav>
 
@@ -454,35 +455,35 @@
 <!-- ═══════════════════════════════════════════════════════ FUTURES -->
 <style>
 /* ── Futures + VolCluster pages — artifact "sheet" styling ── */
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab){--fbrand:#1f4e79;--fbrandDark:#163a5c;--fcoral:#c0322b;--fink:#000000;--fhead:#d9d9d9;--fblue:#bdd7ee;--fcream:#ffffff}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .card{background:var(--fcream);border:1px solid #d0d3d7;box-shadow:0 6px 18px rgba(36,52,71,.06)}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .card-title{color:var(--fink)}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .note{background:#fff2cc;border:1px solid #e2d089;color:#6b5900}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-row{gap:10px;flex-wrap:wrap;align-items:flex-end}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-group{min-width:150px}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-group label{color:#6e7b8c;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab){--fbrand:#1f4e79;--fbrandDark:#163a5c;--fcoral:#c0322b;--fink:#000000;--fhead:#d9d9d9;--fblue:#bdd7ee;--fcream:#ffffff}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .card{background:var(--fcream);border:1px solid #d0d3d7;box-shadow:0 6px 18px rgba(36,52,71,.06)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .card-title{color:var(--fink)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .note{background:#fff2cc;border:1px solid #e2d089;color:#6b5900}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .config-row{gap:10px;flex-wrap:wrap;align-items:flex-end}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .config-group{min-width:150px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .config-group label{color:#6e7b8c;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 /* light blue = input cells (matches OB/AIT cell-blue) */
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-group input{background:var(--fblue);border:1px solid #999;color:var(--fbrand);font-weight:700;font-size:14px;border-radius:4px;height:40px;width:100%;padding:0 12px}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-group input:focus{outline:2px solid var(--fbrand);border-color:var(--fbrand)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .config-group input{background:var(--fblue);border:1px solid #999;color:var(--fbrand);font-weight:700;font-size:14px;border-radius:4px;height:40px;width:100%;padding:0 12px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .config-group input:focus{outline:2px solid var(--fbrand);border-color:var(--fbrand)}
 /* derived Qty / Min Capital cells use the same look as the input cells */
 :is(#f-qty-disp,#f-mincap-disp,#vc-qty-disp,#vc-mincap-disp){background:var(--fblue);border:1px solid #999;color:var(--fbrand);border-radius:4px;height:40px;display:flex;align-items:center;padding:0 12px;font-size:14px;font-weight:700}
 /* stats as sheet cells */
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat{background:var(--fhead);border:1px solid #999;border-radius:4px;box-shadow:none}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-label{color:#333;text-transform:uppercase;letter-spacing:.3px;font-size:10px}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-value{color:var(--fink);font-size:16px}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-value.neu{color:var(--fbrand)}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-value.pos{color:#1a7f37}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-value.neg{color:var(--fcoral)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .stat{background:var(--fhead);border:1px solid #999;border-radius:4px;box-shadow:none}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .stat-label{color:#333;text-transform:uppercase;letter-spacing:.3px;font-size:10px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .stat-value{color:var(--fink);font-size:16px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .stat-value.neu{color:var(--fbrand)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .stat-value.pos{color:#1a7f37}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .stat-value.neg{color:var(--fcoral)}
 /* trade table — same Excel look as OB/AIT */
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) table{border-collapse:collapse;width:100%}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) table thead th{background:var(--fbrand);color:#fff;font-weight:600;font-size:11px;padding:8px 10px;border:1px solid var(--fbrandDark);white-space:nowrap}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) table td{border:1px solid #d9d9d9;padding:6px 10px;font-size:12px}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) table tbody tr:nth-child(even){background:#f2f2f2}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .pos{color:#1a7f37!important}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .neg{color:#c0322b!important}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .peak{color:#7f6000;font-weight:bold}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .tag-long{background:rgba(0,97,0,.12);color:#1a7f37}
-:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .tag-short{background:rgba(192,50,43,.12);color:#c0322b}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) table{border-collapse:collapse;width:100%}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) table thead th{background:var(--fbrand);color:#fff;font-weight:600;font-size:11px;padding:8px 10px;border:1px solid var(--fbrandDark);white-space:nowrap}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) table td{border:1px solid #d9d9d9;padding:6px 10px;font-size:12px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) table tbody tr:nth-child(even){background:#f2f2f2}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .pos{color:#1a7f37!important}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .neg{color:#c0322b!important}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .peak{color:#7f6000;font-weight:bold}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .tag-long{background:rgba(0,97,0,.12);color:#1a7f37}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab,#page-autoresearch-lab) .tag-short{background:rgba(192,50,43,.12);color:#c0322b}
 </style>
 <div id="page-futures" class="page">
   <div class="card">
@@ -2568,6 +2569,59 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
   </div>
 </div>
 
+<div id="page-autoresearch-lab" class="page">
+  <div class="xm-head"><h2>🤖 Autoresearch Lab</h2><span class="xm-mode paper">paper</span>
+    <span class="muted" style="font-size:12px">Strangle strategies found by the autoresearch backtest loop · paper only, never places orders</span></div>
+  <div class="card">
+    <div class="card-title">Configuration</div>
+    <div class="note" style="margin-bottom:10px">Each strategy sells a this-week CE and PE at a fixed % OTM from the 09:20 NIFTY spot and holds to expiry, no stop. "Thu" enters on the second session after the previous expiry, "Wed" on the first. Every strategy compounds its own equity from Capital: lots = equity ÷ margin per lot, as in the backtest.</div>
+    <div class="config-row">
+      <div class="config-group"><label>Capital (₹)</label><input type="number" id="ar-cap"/></div>
+      <div class="config-group"><label>Margin per lot (₹)</label><input type="number" id="ar-margin"/></div>
+      <div class="config-group"><label>Lot Size</label><input type="number" id="ar-lot" min="1"/></div>
+      <div class="config-group"><label>Start</label><input type="date" id="ar-start"/></div>
+      <div class="config-group"><label>End</label><input type="date" id="ar-end"/></div>
+      <div class="config-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="saveAutoresearchLab()">Save</button></div>
+    </div>
+    <div class="xm-msg" id="ar-msg"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Paper tracking</div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>Strategy</th><th>Equity</th><th>Next lots</th><th>Trades</th><th>Won</th><th>Lost</th><th>Net P&amp;L</th><th>Return</th>
+      <th>Worst</th><th>Max DD</th><th>Open position</th><th>Open P&amp;L</th>
+    </tr></thead><tbody id="ar-summary"></tbody></table></div>
+  </div>
+  <div class="card" id="ar-research-card" style="display:none">
+    <div class="card-title">Backtest results <span class="muted" id="ar-research-period" style="font-weight:400"></span></div>
+    <div class="note" id="ar-research-note" style="margin-bottom:10px"></div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>Strategy</th><th>Search CAGR</th><th>Search DD</th><th>2026 test CAGR</th><th>2026 test DD</th>
+      <th>Full CAGR</th><th>Full DD</th><th>Worst week</th><th>DD &lt; 12% everywhere</th>
+    </tr></thead><tbody id="ar-research"></tbody></table></div>
+  </div>
+  <div class="card" id="ar-log-card" style="display:none">
+    <div class="card-title">Experiment log <span class="muted" style="font-weight:400">· search period only, kept = improved the score</span></div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>#</th><th>Experiment</th><th>CAGR</th><th>Max DD</th><th>Status</th>
+    </tr></thead><tbody id="ar-log"></tbody></table></div>
+  </div>
+  <div class="card" id="ar-test-card" style="display:none">
+    <div class="card-title">2026 test, week by week <span class="muted" id="ar-test-label" style="font-weight:400"></span></div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>#</th><th>Entry</th><th>Exit</th><th>Lots</th><th>CE strike</th><th>CE entry</th><th>CE exit</th>
+      <th>PE strike</th><th>PE entry</th><th>PE exit</th><th>P&amp;L</th><th>Equity</th>
+    </tr></thead><tbody id="ar-test"></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Paper trades</div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>#</th><th>Strategy</th><th>Entry date</th><th>Spot</th><th>Expiry</th><th>Lots</th><th>CE strike</th><th>CE entry</th><th>CE exit</th>
+      <th>PE strike</th><th>PE entry</th><th>PE exit</th><th>Gross</th><th>Charges</th><th>Net P&amp;L</th><th>Exit</th>
+    </tr></thead><tbody id="ar-trades"></tbody></table></div>
+  </div>
+</div>
+
 <script>
 function xmINR(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!isFinite(n)) return '—'; return (n<0?'-₹':'₹')+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:0}); }
 function xmPct(v){ if(v===null||v===undefined) return '—'; return (Number(v)*100).toFixed(2)+'%'; }
@@ -2707,6 +2761,61 @@ async function loadStrangleLab(){
       '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+fmtDate(t.exit_date)+'</td></tr>';
   }).join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No closed paper trades yet — first entry Wednesday '+fmtDate(c.start_date)+' 09:20.</td></tr>';
 }
+async function loadAutoresearchLab(){
+  var d=await xmFetch('/api/autoresearch-lab');
+  if(!d.ok){ document.getElementById('ar-msg').textContent=d.message||'Failed to load'; return; }
+  var c=d.config||{};
+  [['ar-cap','capital'],['ar-margin','margin_per_lot'],['ar-lot','lot_size'],['ar-start','start_date'],['ar-end','end_date']].forEach(function(p){
+    var el=document.getElementById(p[0]); if(document.activeElement!==el) el.value=c[p[1]]; });
+  document.getElementById('ar-msg').textContent=d.connected?'':'Zerodha not connected — entries and exits need the admin token.';
+  var pc=function(v){ return '<span class="'+cls(toNumber(v))+'">'+pct(toNumber(v)*100)+'</span>'; };
+  document.getElementById('ar-summary').innerHTML=(d.strategies||[]).map(function(s){
+    var m=s.summary||{}, o=s.open, pos='—', op='';
+    if(o){ pos=o.lots+' lots · CE '+o.legs.ce.strike+' @ '+fmt(o.legs.ce.entry_price)+' · PE '+o.legs.pe.strike+' @ '+fmt(o.legs.pe.entry_price)+' · exp '+fmtDate(o.expiry);
+      if(o.open_pnl!=null) op='<span class="'+cls(toNumber(o.open_pnl))+'">'+inr(o.open_pnl)+'</span>'; }
+    var lots=Math.floor(toNumber(m.equity)/(toNumber(c.margin_per_lot)||1));
+    return '<tr><td style="font-weight:bold">'+s.label+'</td><td>'+inr(m.equity)+'</td><td>'+lots+'</td><td>'+(m.trades||0)+'</td>'+
+      '<td class="pos">'+(m.wins||0)+'</td><td class="'+(m.losses?'neg':'')+'">'+(m.losses||0)+'</td>'+
+      '<td class="'+cls(toNumber(m.net_pnl))+'">'+inr(m.net_pnl||0)+'</td><td class="'+cls(toNumber(m.return_pct))+'">'+pct(toNumber(m.return_pct))+'</td>'+
+      '<td class="'+cls(toNumber(m.worst))+'">'+inr(m.worst||0)+'</td><td class="'+cls(toNumber(m.max_dd_pct))+'">'+pct(toNumber(m.max_dd_pct))+'</td>'+
+      '<td>'+pos+'</td><td>'+op+'</td></tr>';
+  }).join('');
+  var r=d.research;
+  ['ar-research-card','ar-log-card','ar-test-card'].forEach(function(id){ document.getElementById(id).style.display=r?'':'none'; });
+  if(r){
+    document.getElementById('ar-research-period').textContent='· '+(r.period||'');
+    document.getElementById('ar-research-note').textContent=r.note||'';
+    document.getElementById('ar-research').innerHTML=(r.strategies||[]).map(function(s){
+      return '<tr><td style="font-weight:bold">'+s.label+'</td>'+
+        '<td>'+pc(s.dev.cagr)+'</td><td>'+pc(s.dev.max_dd)+'</td><td>'+pc(s.test.cagr)+'</td><td>'+pc(s.test.max_dd)+'</td>'+
+        '<td>'+pc(s.all.cagr)+'</td><td>'+pc(s.all.max_dd)+'</td><td class="'+cls(toNumber(s.all.worst_trade))+'">'+inr(s.all.worst_trade)+'</td>'+
+        '<td class="'+(s.passes?'pos':'neg')+'" style="font-weight:bold">'+(s.passes?'Yes':'No')+'</td></tr>'; }).join('');
+    document.getElementById('ar-log').innerHTML=(r.experiments||[]).map(function(e,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+e.description+'</td><td>'+pc(e.cagr)+'</td><td>'+pc(e.max_dd)+'</td>'+
+        '<td class="'+(e.status==='keep'?'pos':'muted')+'" style="font-weight:bold">'+e.status+'</td></tr>'; }).join('');
+    document.getElementById('ar-test-label').textContent='· '+(r.test_trades_label||'');
+    document.getElementById('ar-test').innerHTML=(r.test_trades||[]).map(function(t,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+fmtDate(t.entry)+'</td><td>'+fmtDate(t.exit)+'</td><td>'+t.lots+'</td>'+
+        '<td>'+t.ce_strike+'</td><td>'+fmt(t.ce_entry)+'</td><td>'+fmt(t.ce_exit)+'</td><td>'+t.pe_strike+'</td><td>'+fmt(t.pe_entry)+'</td><td>'+fmt(t.pe_exit)+'</td>'+
+        '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+inr(t.equity)+'</td></tr>'; }).join('');
+  }
+  var rows=[];
+  (d.strategies||[]).forEach(function(s){ (s.trades||[]).forEach(function(t){ rows.push([s.label,t]); }); });
+  rows.sort(function(a,b){ return a[1].entry_date<b[1].entry_date?1:a[1].entry_date>b[1].entry_date?-1:0; });
+  document.getElementById('ar-trades').innerHTML=rows.map(function(x,i){
+    var t=x[1], ce=t.legs.ce, pe=t.legs.pe;
+    return '<tr><td>'+(rows.length-i)+'</td><td>'+x[0]+'</td><td>'+fmtDate(t.entry_date)+'</td><td>'+fmt(toNumber(t.spot))+'</td><td>'+fmtDate(t.expiry)+'</td><td>'+t.lots+'</td>'+
+      '<td>'+ce.strike+'</td><td>'+fmt(toNumber(ce.entry_price))+'</td><td>'+fmt(toNumber(ce.exit_price))+'</td>'+
+      '<td>'+pe.strike+'</td><td>'+fmt(toNumber(pe.entry_price))+'</td><td>'+fmt(toNumber(pe.exit_price))+'</td>'+
+      '<td class="'+cls(toNumber(t.gross_pnl))+'">'+inr(t.gross_pnl)+'</td><td>'+inr(t.charges)+'</td>'+
+      '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+fmtDate(t.exit_date)+'</td></tr>';
+  }).join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No closed paper trades yet — tracking starts '+fmtDate(c.start_date)+'.</td></tr>';
+}
+async function saveAutoresearchLab(){
+  var v=function(id){ return document.getElementById(id).value; };
+  var d=await xmPost('/api/autoresearch-lab/config',{capital:v('ar-cap'),margin_per_lot:v('ar-margin'),lot_size:v('ar-lot'),start_date:v('ar-start'),end_date:v('ar-end')});
+  xmResult('ar-msg',d.ok?{ok:true,action:'save'}:d); loadAutoresearchLab();
+}
 async function saveStrangleLab(){
   var v=function(id){ return document.getElementById(id).value; };
   var d=await xmPost('/api/strangle-lab/config',{capital:v('sl-cap'),lots:v('sl-lots'),lot_size:v('sl-lot'),start_date:v('sl-start'),end_date:v('sl-end')});
@@ -2786,6 +2895,7 @@ function goto(id){
   if(id==='vol-cluster') loadVolCluster();
   if(id==='gc-options-buy') loadGcob();
   if(id==='strangle-lab') loadStrangleLab();
+  if(id==='autoresearch-lab') loadAutoresearchLab();
   var _nv=document.querySelector('nav'); if(_nv) _nv.classList.remove('open');  // close mobile drawer after navigating
 }
 function openSidebar(){ var n=document.querySelector('nav'); var s=document.getElementById('nav-scrim'); if(n)n.classList.add('open'); if(s)s.classList.add('show'); }
