@@ -4,7 +4,8 @@ found by the autoresearch backtest loop (strangle_autoresearch repo).
 Each strategy sells a current-weekly CE and PE at fixed % OTM from the 09:20
 NIFTY spot, entering on the Nth trading session after the previous expiry
 (0 = the day after expiry, 1 = the session after that) and holding to expiry
-with no stop. Sizing matches the backtest: every strategy compounds its own
+with no stop. Strategies with a vix_max skip the week when the India VIX day
+open is above it. Sizing matches the backtest: every strategy compounds its own
 equity from ₹10L, lots = floor(equity / margin_per_lot).
 
 Prices are Kite LTPs on the admin account. No order function is ever called.
@@ -27,6 +28,11 @@ STRATEGIES = [
     {"id": "thu30", "entry_offset": 1, "ce_pct": 3.0, "pe_pct": 3.0, "label": "Thu · 3.0% / 3.0% (safer)"},
     {"id": "thu2520", "entry_offset": 1, "ce_pct": 2.5, "pe_pct": 2.0, "label": "Thu · CE 2.5% / PE 2.0% (search winner)"},
     {"id": "wed35", "entry_offset": 0, "ce_pct": 3.5, "pe_pct": 3.5, "label": "Wed · 3.5% / 3.5% (live rules)"},
+    {"id": "fri1025", "entry_offset": 2, "ce_pct": 1.0, "pe_pct": 2.5, "label": "Fri · CE 1.0% / PE 2.5% (DD 12% pick*)"},
+    {"id": "thu1020v", "entry_offset": 1, "ce_pct": 1.0, "pe_pct": 2.0, "vix_max": 20,
+     "label": "Thu · CE 1.0% / PE 2.0%, VIX ≤ 20 (DD 20% pick*)"},
+    {"id": "wed1025v", "entry_offset": 0, "ce_pct": 1.0, "pe_pct": 2.5, "vix_max": 20,
+     "label": "Wed · CE 1.0% / PE 2.5%, VIX ≤ 20 (DD 25% pick*)"},
 ]
 
 _warned = {"no_token": None}
@@ -46,6 +52,7 @@ def _load() -> dict[str, Any]:
     books = data.get("books") or {}
     for s in STRATEGIES:
         books.setdefault(s["id"], {"open": None, "trades": [], "last_entry_date": None})
+        books[s["id"]].setdefault("skips", [])
     return {"config": cfg, "books": books}
 
 
@@ -91,6 +98,18 @@ def session_offset(today: str, current_expiry: str) -> int | None:
     return len(after) - 1
 
 
+def vix_open(today: str) -> float | None:
+    """Today's India VIX day open — the backtest filters on the VIX open, not the 09:20 print."""
+    try:
+        bars = kf.index_bars(kf.VIX_TOKEN, "day", 5, max_age_s=300)
+    except Exception:
+        return None
+    if bars.empty or bars.index[-1].strftime("%Y-%m-%d") != today:
+        return None
+    v = float(bars["open"].iloc[-1])
+    return v if v > 0 else None
+
+
 def enter_due(now: datetime) -> dict[str, Any]:
     today = now.strftime("%Y-%m-%d")
     state = _load()
@@ -116,9 +135,21 @@ def enter_due(now: datetime) -> dict[str, Any]:
     spot = kf.nifty_spot()
     if spot <= 0:
         return {"ok": False, "phase": "no_spot", "message": "Autoresearch Lab: could not read NIFTY spot"}
-    opened, failed = [], []
+    opened, failed, skipped = [], [], []
+    vix = None
     for s in due:
         book = state["books"][s["id"]]
+        if s.get("vix_max") is not None:
+            if vix is None:
+                vix = vix_open(today)
+            if vix is None:
+                failed.append(f"{s['id']}: could not read today's India VIX open")
+                continue
+            if vix > s["vix_max"]:
+                book["skips"].append({"date": today, "vix": round(vix, 2), "expiry": expiry})
+                book["last_entry_date"] = today
+                skipped.append(s["id"])
+                continue
         lots = int(_equity(cfg, book) // float(cfg["margin_per_lot"]))
         if lots <= 0:
             failed.append(f"{s['id']}: equity below one lot of margin")
@@ -143,9 +174,12 @@ def enter_due(now: datetime) -> dict[str, Any]:
     _save(state)
     if opened:
         kf.log(f"{LABEL}: opened {', '.join(opened)} @ spot {spot:.2f}", details={"failed": failed})
+    if skipped:
+        kf.log(f"{LABEL}: skipped {', '.join(skipped)} — India VIX open {vix:.2f} above cap")
     if failed:
         kf.log(f"{LABEL}: entry failed for {'; '.join(failed)}", level="WARNING")
-    return {"ok": not failed, "phase": "entered" if opened else "no_entry", "opened": opened, "failed": failed}
+    return {"ok": not failed, "phase": "entered" if opened else "no_entry", "opened": opened,
+            "skipped": skipped, "failed": failed}
 
 
 def exit_due(now: datetime) -> dict[str, Any]:
@@ -208,5 +242,5 @@ def panel(with_marks: bool = True) -> dict[str, Any]:
                     pass
         summary = sl._summary(book["trades"], float(cfg["capital"]))
         summary["equity"] = round(_equity(cfg, book), 2)
-        out.append({**s, "open": open_view, "trades": book["trades"], "summary": summary})
+        out.append({**s, "open": open_view, "trades": book["trades"], "skips": book["skips"], "summary": summary})
     return {"ok": True, "config": cfg, "strategies": out, "research": kf.A().kv_get(RESEARCH_KEY, None)}

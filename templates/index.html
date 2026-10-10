@@ -2607,9 +2607,16 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
     </tr></thead><tbody id="ar-log"></tbody></table></div>
   </div>
   <div class="card" id="ar-test-card" style="display:none">
-    <div class="card-title">2026 test, week by week <span class="muted" id="ar-test-label" style="font-weight:400"></span></div>
+    <div class="card-title">Backtest trades, week by week</div>
+    <div class="config-row" style="margin-bottom:10px">
+      <div class="config-group"><label>Strategy</label><select id="ar-bt-strat" onchange="renderArTrades()"></select></div>
+      <div class="config-group"><label>Period</label><select id="ar-bt-period" onchange="renderArTrades()">
+        <option value="all">Full period</option><option value="search">2024–25 (search)</option><option value="test">2026 (test)</option></select></div>
+      <div class="config-group" style="justify-content:flex-end"><span class="muted" id="ar-bt-stats" style="font-size:12px"></span></div>
+    </div>
+    <div class="note" style="margin-bottom:10px">Full-period run from ₹10L in Jul 2024, so lots and equity carry through into 2026.</div>
     <div class="table-wrap"><table><thead><tr>
-      <th>#</th><th>Entry</th><th>Exit</th><th>Lots</th><th>CE strike</th><th>CE entry</th><th>CE exit</th>
+      <th>#</th><th>Period</th><th>Entry</th><th>Exit</th><th>Lots</th><th>CE strike</th><th>CE entry</th><th>CE exit</th>
       <th>PE strike</th><th>PE entry</th><th>PE exit</th><th>P&amp;L</th><th>Equity</th>
     </tr></thead><tbody id="ar-test"></tbody></table></div>
   </div>
@@ -2770,7 +2777,8 @@ async function loadAutoresearchLab(){
   document.getElementById('ar-msg').textContent=d.connected?'':'Zerodha not connected — entries and exits need the admin token.';
   var pc=function(v){ return '<span class="'+cls(toNumber(v))+'">'+pct(toNumber(v)*100)+'</span>'; };
   document.getElementById('ar-summary').innerHTML=(d.strategies||[]).map(function(s){
-    var m=s.summary||{}, o=s.open, pos='—', op='';
+    var m=s.summary||{}, o=s.open, pos='—', op='', sk=(s.skips||[]).slice(-1)[0];
+    if(!o && sk) pos='<span class="muted">Skipped '+fmtDate(sk.date)+' · VIX '+fmt(sk.vix)+' &gt; '+s.vix_max+'</span>';
     if(o){ pos=o.lots+' lots · CE '+o.legs.ce.strike+' @ '+fmt(o.legs.ce.entry_price)+' · PE '+o.legs.pe.strike+' @ '+fmt(o.legs.pe.entry_price)+' · exp '+fmtDate(o.expiry);
       if(o.open_pnl!=null) op='<span class="'+cls(toNumber(o.open_pnl))+'">'+inr(o.open_pnl)+'</span>'; }
     var lots=Math.floor(toNumber(m.equity)/(toNumber(c.margin_per_lot)||1));
@@ -2792,11 +2800,11 @@ async function loadAutoresearchLab(){
         '<td class="'+(s.passes?'pos':'neg')+'" style="font-weight:bold">'+(s.passes?'Yes':'No')+'</td></tr>'; }).join('');
     arLogRows=(r.experiments||[]).map(function(e,i){ return Object.assign({n:i+1},e); });
     renderArLog();
-    document.getElementById('ar-test-label').textContent='· '+(r.test_trades_label||'');
-    document.getElementById('ar-test').innerHTML=(r.test_trades||[]).map(function(t,i){
-      return '<tr><td>'+(i+1)+'</td><td>'+fmtDate(t.entry)+'</td><td>'+fmtDate(t.exit)+'</td><td>'+t.lots+'</td>'+
-        '<td>'+t.ce_strike+'</td><td>'+fmt(t.ce_entry)+'</td><td>'+fmt(t.ce_exit)+'</td><td>'+t.pe_strike+'</td><td>'+fmt(t.pe_entry)+'</td><td>'+fmt(t.pe_exit)+'</td>'+
-        '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+inr(t.equity)+'</td></tr>'; }).join('');
+    arResearch=r;
+    var sel=document.getElementById('ar-bt-strat'), keep=sel.value;
+    sel.innerHTML=(r.strategies||[]).map(function(s){ return '<option value="'+s.id+'">'+s.label+'</option>'; }).join('');
+    if(keep) sel.value=keep;
+    renderArTrades();
   }
   var rows=[];
   (d.strategies||[]).forEach(function(s){ (s.trades||[]).forEach(function(t){ rows.push([s.label,t]); }); });
@@ -2809,6 +2817,21 @@ async function loadAutoresearchLab(){
       '<td class="'+cls(toNumber(t.gross_pnl))+'">'+inr(t.gross_pnl)+'</td><td>'+inr(t.charges)+'</td>'+
       '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+fmtDate(t.exit_date)+'</td></tr>';
   }).join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No closed paper trades yet — tracking starts '+fmtDate(c.start_date)+'.</td></tr>';
+}
+var arResearch=null;
+function renderArTrades(){
+  if(!arResearch) return;
+  var id=document.getElementById('ar-bt-strat').value, per=document.getElementById('ar-bt-period').value;
+  var s=(arResearch.strategies||[]).filter(function(x){ return x.id===id; })[0]||{};
+  var rows=(s.trades||[]).filter(function(t){ return per==='all'||t.period===per; });
+  var net=rows.reduce(function(a,t){ return a+toNumber(t.pnl); },0), won=rows.filter(function(t){ return t.pnl>0; }).length;
+  var worst=rows.reduce(function(a,t){ return Math.min(a,toNumber(t.pnl)); },0);
+  document.getElementById('ar-bt-stats').innerHTML=rows.length+' trades · won '+won+' · lost '+(rows.length-won)+
+    ' · net <span class="'+cls(net)+'">'+inr(net)+'</span> · worst <span class="'+cls(worst)+'">'+inr(worst)+'</span>';
+  document.getElementById('ar-test').innerHTML=rows.map(function(t,i){
+    return '<tr><td>'+(i+1)+'</td><td>'+(t.period==='test'?'2026 test':'search')+'</td><td>'+fmtDate(t.entry)+'</td><td>'+fmtDate(t.exit)+'</td><td>'+t.lots+'</td>'+
+      '<td>'+t.ce_strike+'</td><td>'+fmt(t.ce_entry)+'</td><td>'+fmt(t.ce_exit)+'</td><td>'+t.pe_strike+'</td><td>'+fmt(t.pe_entry)+'</td><td>'+fmt(t.pe_exit)+'</td>'+
+      '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+inr(t.equity)+'</td></tr>'; }).join('');
 }
 var arLogRows=[], arLogSort={k:'n',dir:1};
 function renderArLog(){
