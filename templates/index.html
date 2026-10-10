@@ -2617,10 +2617,8 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
     <div class="table-wrap"><table><thead><tr>
       <th>Strategy</th><th>CAGR</th><th>Max DD</th><th>Final equity (from ₹10L)</th><th>Trades</th><th>Worst week</th>
     </tr></thead><tbody id="ar-long"></tbody></table></div>
-    <div class="card-title" style="margin-top:16px">Year by year · <span id="ar-long-ylabel" style="font-weight:400"></span></div>
-    <div class="table-wrap"><table><thead><tr>
-      <th>Year</th><th>Return</th><th>Max DD</th><th>Losing weeks</th><th>Worst week</th>
-    </tr></thead><tbody id="ar-long-years"></tbody></table></div>
+    <div class="card-title" style="margin-top:16px">Year by year <span id="ar-long-ylabel" style="font-weight:400"></span></div>
+    <div class="table-wrap"><table><thead id="ar-long-yhead"></thead><tbody id="ar-long-years"></tbody></table></div>
   </div>
   <div class="card" id="ar-log-card" style="display:none">
     <div class="card-title">Experiment log <span class="muted" style="font-weight:400">· search period only, kept = improved the score</span></div>
@@ -2831,13 +2829,17 @@ async function loadAutoresearchLab(){
       document.getElementById('ar-long').innerHTML=(L.strategies||[]).map(function(s){
         return '<tr><td style="font-weight:bold">'+s.label+'</td><td>'+pc(s.cagr)+'</td><td>'+pc(s.max_dd)+'</td><td>'+inr(s.final_equity)+'</td>'+
           '<td>'+s.trades+'</td><td>'+pc(s.worst_week_pct)+' of equity</td></tr>'; }).join('');
-      document.getElementById('ar-long-ylabel').textContent=L.yearly_label||'';
-      document.getElementById('ar-long-years').innerHTML=(L.yearly||[]).map(function(y){
-        return '<tr><td>'+y.year+'</td><td>'+pc(y.ret)+'</td><td>'+pc(y.dd)+'</td><td>'+y.losing+' / '+y.n+'</td><td>'+pc(y.worst)+'</td></tr>'; }).join('');
+      var sets=L.yearly_sets||[{label:L.yearly_label,years:L.yearly||[]}];
+      document.getElementById('ar-long-yhead').innerHTML='<tr><th rowspan="2">Year</th>'+sets.map(function(s){
+        return '<th colspan="4" style="text-align:center">'+s.label+'</th>'; }).join('')+'</tr><tr>'+
+        sets.map(function(){ return '<th>Return</th><th>Max DD</th><th>Losing weeks</th><th>Worst week</th>'; }).join('')+'</tr>';
+      document.getElementById('ar-long-years').innerHTML=(sets[0].years||[]).map(function(y0,i){
+        return '<tr><td>'+y0.year+'</td>'+sets.map(function(s){ var y=s.years[i]||{};
+          return '<td>'+pc(y.ret)+'</td><td>'+pc(y.dd)+'</td><td>'+y.losing+' / '+y.n+'</td><td>'+pc(y.worst)+'</td>'; }).join('')+'</tr>'; }).join('');
     }
     arResearch=r;
     var sel=document.getElementById('ar-bt-strat'), keep=sel.value;
-    sel.innerHTML=(r.strategies||[]).concat(L&&L.trades?[L.trades]:[]).map(function(s){ return '<option value="'+s.id+'">'+s.label+'</option>'; }).join('');
+    sel.innerHTML=(r.strategies||[]).concat(arLongSets(L)).map(function(s){ return '<option value="'+s.id+'">'+s.label+'</option>'; }).join('');
     if(keep) sel.value=keep;
     renderArTrades();
   }
@@ -2874,10 +2876,11 @@ function addArEvent(){
 }
 function removeArEvent(i){ arEvents.splice(i,1); saveArEvents(); }
 var arResearch=null;
+function arLongSets(L){ return !L?[]:(L.trade_sets||(L.trades?[L.trades]:[])); }
 function renderArTrades(){
   if(!arResearch) return;
   var id=document.getElementById('ar-bt-strat').value, per=document.getElementById('ar-bt-period').value;
-  var all=(arResearch.strategies||[]).concat(arResearch.long&&arResearch.long.trades?[arResearch.long.trades]:[]);
+  var all=(arResearch.strategies||[]).concat(arLongSets(arResearch.long));
   var s=all.filter(function(x){ return x.id===id; })[0]||{};
   var rows=(s.trades||[]).filter(function(t){ return per==='all'||t.period===per; });
   var net=rows.reduce(function(a,t){ return a+toNumber(t.pnl); },0), won=rows.filter(function(t){ return t.pnl>0; }).length;

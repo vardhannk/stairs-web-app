@@ -35,6 +35,8 @@ STRATEGIES = [
      "label": "Wed · CE 1.0% / PE 2.5%, VIX ≤ 20 (DD 25% pick*)"},
     {"id": "thu30ve", "entry_offset": 1, "ce_pct": 3.0, "pe_pct": 3.0, "vix_max": 20, "avoid_events": True,
      "label": "Thu · 3.0% / 3.0%, VIX ≤ 20, no event weeks (2019–26 pick)"},
+    {"id": "thu25ve", "entry_offset": 1, "ce_pct": 2.5, "pe_pct": 2.5, "vix_max": 20, "avoid_events": True,
+     "label": "Thu · 2.5% / 2.5%, VIX ≤ 20, no event weeks (2019–26 higher CAGR)"},
 ]
 
 _warned = {"no_token": None}
