@@ -1774,8 +1774,25 @@ if(document.getElementById('nexpw-tbody')) nexpwRecalc();
 </style>
 <div class="nst-tabs" id="nst-tabs">
   <button class="on" data-tab="nsw" onclick="nstTab('nsw')">Nifty Strangle 3.5%</button>
-  <button data-tab="thu30ve" onclick="nstTab('thu30ve')" style="display:none">Thu 3.0% · VIX ≤ 20 · no event weeks</button>
-  <button data-tab="thu25ve" onclick="nstTab('thu25ve')" style="display:none">Thu 2.5% · VIX ≤ 20 · no event weeks</button>
+  <span id="nst-dyn" style="display:contents"></span>
+  <button id="nst-add-btn" onclick="nstShowAdd(true)" style="display:none;background:#fff;border-style:dashed">＋ Add tab</button>
+</div>
+<div id="nst-add" style="display:none;font-family:Calibri,sans-serif;font-size:12px;background:#fff2cc;border:1px solid #e2d089;padding:8px 10px;margin-bottom:6px">
+  <b>New paper strategy tab</b> — sells a CE and a PE at % OTM from the 09:20 spot, no stop; records paper trades only.
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
+    <label>Name (optional)<br><input id="nst-f-name" style="width:170px" placeholder="auto"></label>
+    <label>Entry day<br><select id="nst-f-day"><option value="0">Wed (day after expiry)</option><option value="1" selected>Thu</option><option value="2">Fri</option><option value="3">Mon</option></select></label>
+    <label>CE % OTM<br><input id="nst-f-ce" type="number" step="0.1" value="3.0" style="width:70px"></label>
+    <label>PE % OTM<br><input id="nst-f-pe" type="number" step="0.1" value="3.0" style="width:70px"></label>
+    <label>Expiry sold<br><select id="nst-f-series"><option value="current">This week (held to expiry)</option><option value="next">Next week (bought back on this week's expiry day)</option></select></label>
+    <label>VIX filter<br><select id="nst-f-vix" onchange="document.getElementById('nst-f-vixv').style.display=this.value==='on'?'':'none'"><option value="off">No VIX filter</option><option value="on">Skip if VIX open &gt;</option></select>
+      <input id="nst-f-vixv" type="number" step="0.5" value="20" style="width:55px;display:none"></label>
+    <label><input id="nst-f-ev" type="checkbox"> Skip event weeks</label>
+    <label>Lots<br><input id="nst-f-lots" type="number" min="1" placeholder="Auto" style="width:70px"></label>
+    <button onclick="nstAdd()">Add tab</button> <button onclick="nstShowAdd(false)">Cancel</button>
+    <span id="nst-f-msg" style="color:#c0322b"></span>
+  </div>
+  <div style="color:#6b5900;margin-top:4px">Lots: leave blank for Auto (equity ÷ margin per lot, compounding like the backtest), or enter a fixed number such as 10.</div>
 </div>
 <div id="nsw-ws">
 <div class="ws-topbar">🎯 Nifty Strangle 3.5% — Weekly Short Strangle · Wed 09:20 AM entry → next Tue ~15:38 PM square-off (held through expiry) &nbsp;|&nbsp; "It's not what you make. It's what you keep."</div>
@@ -1871,9 +1888,12 @@ if(document.getElementById('nexpw-tbody')) nexpwRecalc();
     <td class="cell-black" style="width:110px;font-weight:bold">Start Capital</td>
     <td class="cell-blue" style="width:120px" id="nst-cap">—</td>
     <td class="cell-black" style="width:100px;font-weight:bold">Next Lots</td>
-    <td class="cell-blue" style="width:80px" id="nst-lots">—</td>
+    <td class="cell-blue" style="width:90px" id="nst-lots">—</td>
+    <td class="cell-black" style="width:90px;font-weight:bold">Lot Sizing</td>
+    <td class="cell-blue" style="width:220px"><input id="nst-lots-in" class="ws-inp" type="number" min="1" placeholder="Auto" style="width:70px"> <button onclick="nstSaveLots()" style="font-size:10px">Save</button> <span id="nst-lots-msg" style="font-size:10px"></span></td>
     <td class="cell-black" style="width:100px;font-weight:bold">Margin / Lot</td>
     <td class="cell-blue" style="width:100px" id="nst-margin">—</td>
+    <td id="nst-remove-cell" style="width:110px"></td>
   </tr>
 </table>
 <table style="margin-bottom:3px">
@@ -1883,11 +1903,11 @@ if(document.getElementById('nexpw-tbody')) nexpwRecalc();
     <td class="cell-black" style="width:110px;font-weight:bold">PE Strike (OTM %)</td>
     <td class="cell-blue" style="width:80px" id="nst-pe">—</td>
     <td class="cell-black" style="width:80px;font-weight:bold">Entry</td>
-    <td class="cell-black" style="width:240px">Thu 09:20 AM IST (skip if VIX open &gt; 20)</td>
+    <td class="cell-black" style="width:240px" id="nst-entry"></td>
     <td class="cell-black" style="width:90px;font-weight:bold">Square-off</td>
-    <td class="cell-black" style="width:240px">Tue expiry, held to settlement</td>
+    <td class="cell-black" style="width:240px" id="nst-exit"></td>
     <td class="cell-black" style="width:90px;font-weight:bold">Event weeks</td>
-    <td class="cell-black" style="width:240px">Skipped · open trade exits 15:20 day before</td>
+    <td class="cell-black" style="width:240px" id="nst-events"></td>
   </tr>
 </table>
 <table style="margin-bottom:6px">
@@ -2047,10 +2067,51 @@ window.nstTab=function(tab){
   if(tab==='nsw'){ if(window.nswSyncFromDB) window.nswSyncFromDB(); } else window.nstLoad();
 };
 window.nstLoad=async function(){
-  if(nst.tab==='nsw') return;
+  if(!nst.admin) return;
   try{ var r=await fetch('/api/autoresearch-lab'); nst.data=await r.json(); }
   catch(e){ nst.data={ok:false,message:'Failed to load: '+e}; }
-  nstRender();
+  nstTabs();
+  if(nst.tab!=='nsw') nstRender();
+};
+var DAY={0:'Wed',1:'Thu',2:'Fri',3:'Mon'};
+function nstShort(s){
+  if(s.custom) return s.label;
+  return DAY[s.entry_offset]+' '+(s.ce_pct===s.pe_pct?s.ce_pct.toFixed(1)+'%':'CE '+s.ce_pct+'% / PE '+s.pe_pct+'%')+
+    (s.series==='next'?' · next week':'')+(s.vix_max!=null?' · VIX ≤ '+s.vix_max:'')+(s.avoid_events?' · no event weeks':'');
+}
+function nstTabs(){
+  var list=((nst.data||{}).strategies||[]).filter(function(s){ return s.tab; });
+  if(nst.tab!=='nsw'&&!list.some(function(s){ return s.id===nst.tab; })) nst.tab='nsw';
+  document.getElementById('nst-dyn').innerHTML=list.map(function(s){
+    return '<button data-tab="'+s.id+'" class="'+(s.id===nst.tab?'on':'')+'" onclick="nstTab(\''+s.id+'\')">'+nstShort(s)+'</button>'; }).join('');
+  document.querySelector('#nst-tabs [data-tab="nsw"]').classList.toggle('on',nst.tab==='nsw');
+  document.getElementById('nsw-ws').style.display=nst.tab==='nsw'?'':'none';
+  document.getElementById('nst-ws').style.display=nst.tab==='nsw'?'none':'';
+}
+window.nstShowAdd=function(show){ document.getElementById('nst-add').style.display=show?'':'none'; document.getElementById('nst-f-msg').textContent=''; };
+async function nstPost(body){
+  var r=await fetch('/api/autoresearch-lab/strategy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  try{ return await r.json(); }catch(e){ return {ok:false,message:'HTTP '+r.status}; }
+}
+window.nstAdd=async function(){
+  var v=function(id){ return document.getElementById(id).value; };
+  var d=await nstPost({action:'add',name:v('nst-f-name'),entry_offset:v('nst-f-day'),ce_pct:v('nst-f-ce'),pe_pct:v('nst-f-pe'),
+    series:v('nst-f-series'),vix_max:v('nst-f-vix')==='on'?v('nst-f-vixv'):null,avoid_events:document.getElementById('nst-f-ev').checked,
+    lots:v('nst-f-lots')||null});
+  if(!d.ok){ document.getElementById('nst-f-msg').textContent=d.message||'Failed'; return; }
+  nstShowAdd(false); document.getElementById('nst-f-name').value=''; nst.tab=d.id; await window.nstLoad();
+};
+window.nstSaveLots=async function(){
+  var d=await nstPost({action:'lots',id:nst.tab,lots:document.getElementById('nst-lots-in').value||null});
+  document.getElementById('nst-lots-msg').textContent=d.ok?'Saved':(d.message||'Failed');
+  if(d.ok) window.nstLoad();
+};
+window.nstRemove=async function(){
+  var s=((nst.data||{}).strategies||[]).filter(function(x){ return x.id===nst.tab; })[0];
+  if(!s||!confirm('Remove the tab "'+s.label+'"? Its paper trades are archived, not shown any more.')) return;
+  var d=await nstPost({action:'remove',id:nst.tab});
+  if(!d.ok){ alert(d.message||'Failed'); return; }
+  nst.tab='nsw'; await window.nstLoad(); if(window.nswSyncFromDB) window.nswSyncFromDB();
 };
 
 function nstRender(){
@@ -2062,7 +2123,13 @@ function nstRender(){
   document.getElementById('nst-topbar').innerHTML='🎯 Nifty Strangle '+s.label+' — Weekly Short Strangle · tracking '+dt(c.start_date)+' → '+dt(c.end_date)+
     ' &nbsp;|&nbsp; PAPER TRADING';
   document.getElementById('nst-cap').textContent='₹'+f(cap,0);
-  document.getElementById('nst-lots').textContent=Math.floor(eq/(Number(c.margin_per_lot)||1));
+  document.getElementById('nst-lots').textContent=s.next_lots+(s.lots_fixed?' (fixed)':' (auto)');
+  var li=document.getElementById('nst-lots-in'); if(document.activeElement!==li) li.value=s.lots_fixed||'';
+  document.getElementById('nst-lots-msg').textContent='';
+  document.getElementById('nst-entry').textContent=DAY[s.entry_offset]+' 09:20 AM IST'+(s.vix_max!=null?' (skip if VIX open > '+s.vix_max+')':' (no VIX filter)');
+  document.getElementById('nst-exit').textContent=s.series==='next'?'Next-week expiry, bought back Tue 15:31 (this week\'s expiry day)':'Tue expiry, held to settlement';
+  document.getElementById('nst-events').textContent=s.avoid_events?'Skipped · open trade exits 15:20 day before':'Traded (no event filter)';
+  document.getElementById('nst-remove-cell').innerHTML=s.custom?'<button onclick="nstRemove()" style="font-size:10px;color:#c0322b">Remove tab</button>':'';
   document.getElementById('nst-margin').textContent='₹'+f(c.margin_per_lot,0);
   document.getElementById('nst-ce').textContent=s.ce_pct+'%';
   document.getElementById('nst-pe').textContent=s.pe_pct+'%';
@@ -2095,7 +2162,7 @@ function nstRender(){
       '<td>OPEN</td><td>paper</td><td class="'+sg(op)+'">'+(op!=null?'₹'+f(op)+' (open)':'')+'</td>'+
       '<td colspan="5"></td></tr>';
   }
-  document.getElementById('nst-tbody').innerHTML=html||'<tr><td colspan="19" style="padding:10px">No trades yet — the first Thursday entry is after '+dt(c.start_date)+'.</td></tr>';
+  document.getElementById('nst-tbody').innerHTML=html||'<tr><td colspan="19" style="padding:10px">No trades yet — the first entry is on or after '+dt(c.start_date)+'.</td></tr>';
   document.getElementById('nst-skips').innerHTML=skips.slice().reverse().map(function(k,i){
     var why=k.reason==='event'?'Event week: '+k.event+' ('+dt(k.event_date)+')':(k.reason==='vix'?'VIX open '+k.vix+' > 20':k.reason);
     return '<tr><td>'+(skips.length-i)+'</td><td>'+dt(k.date)+'</td><td>'+dt(k.expiry)+'</td><td>'+why+'</td></tr>';
@@ -2105,7 +2172,7 @@ function nstRender(){
 setTimeout(function(){
   fetch('/api/me').then(function(r){ return r.json(); }).then(function(d){
     if(!d||!d.is_admin) return;
-    document.querySelectorAll('#nst-tabs button').forEach(function(b){ b.style.display=''; });
+    nst.admin=true; document.getElementById('nst-add-btn').style.display=''; window.nstLoad();
   }).catch(function(){});
 }, 900);
 })();

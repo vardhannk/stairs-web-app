@@ -5634,6 +5634,16 @@ def api_autoresearch_lab_config():
     return _admin_book_call(lambda: {"ok": True, "config": autoresearch_lab.set_config(request.get_json(silent=True) or {})})
 
 
+@app.route("/api/autoresearch-lab/strategy", methods=["POST"])
+def api_autoresearch_lab_strategy():
+    def _edit():
+        try:
+            return autoresearch_lab.edit_strategy(request.get_json(silent=True) or {})
+        except ValueError as e:
+            return {"ok": False, "message": str(e)}
+    return _admin_book_call(_edit)
+
+
 _QUIET_PHASES = {"hold", "idle_auto_off", "model_off", "outside_session", "flat_no_signal",
                  "past_cutoff", "pre_open", "weekend", "flat", "no_entry"}
 

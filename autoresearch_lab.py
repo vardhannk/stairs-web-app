@@ -4,9 +4,11 @@ found by the autoresearch backtest loop (strangle_autoresearch repo).
 Each strategy sells a current-weekly CE and PE at fixed % OTM from the 09:20
 NIFTY spot, entering on the Nth trading session after the previous expiry
 (0 = the day after expiry, 1 = the session after that) and holding to expiry
-with no stop. Strategies with a vix_max skip the week when the India VIX day
-open is above it. Sizing matches the backtest: every strategy compounds its own
-equity from ₹10L, lots = floor(equity / margin_per_lot).
+with no stop. A "next" series strategy sells the following expiry instead and
+buys it back on the current expiry day. Strategies with a vix_max skip the week
+when the India VIX day open is above it. Sizing matches the backtest unless a
+fixed lot count is set: every strategy compounds its own equity from ₹10L,
+lots = floor(equity / margin_per_lot). Strategies can be added from the page.
 
 Prices are Kite LTPs on the admin account. No order function is ever called.
 """
@@ -50,17 +52,98 @@ DEFAULT_CONFIG = {
     # Scheduled market-moving government events (Budget, election results). Strategies with
     # avoid_events skip any expiry week containing one and exit an open trade the session before.
     "events": [{"date": "2027-02-01", "name": "Union Budget 2027"}],
+    # Strategies added from the Nifty Strangles page (paper only), and fixed lot counts by
+    # strategy id; a strategy without one sizes as floor(equity / margin_per_lot).
+    "custom": [],
+    "sizing": {},
 }
+TAB_IDS = ("thu30ve", "thu25ve")
+DAYS = {0: "Wed", 1: "Thu", 2: "Fri", 3: "Mon"}
+
+
+def strategies(cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    return STRATEGIES + [{**c, "custom": True} for c in cfg.get("custom") or []]
 
 
 def _load() -> dict[str, Any]:
     data = kf.A().kv_get(BOOK_KEY, None) or {}
     cfg = {**DEFAULT_CONFIG, **(data.get("config") or {})}
     books = data.get("books") or {}
-    for s in STRATEGIES:
+    for s in strategies(cfg):
         books.setdefault(s["id"], {"open": None, "trades": [], "last_entry_date": None})
         books[s["id"]].setdefault("skips", [])
-    return {"config": cfg, "books": books}
+    return {"config": cfg, "books": books, "removed": data.get("removed") or []}
+
+
+def _label(c: dict[str, Any]) -> str:
+    parts = [f"{DAYS[c['entry_offset']]} · CE {c['ce_pct']:g}% / PE {c['pe_pct']:g}%",
+             "next week" if c["series"] == "next" else "this week",
+             f"VIX ≤ {c['vix_max']:g}" if c.get("vix_max") is not None else "no VIX filter"]
+    if c.get("avoid_events"):
+        parts.append("no event weeks")
+    return " · ".join(parts)
+
+
+def edit_strategy(body: dict[str, Any]) -> dict[str, Any]:
+    """add / remove a custom strategy, or set any strategy's lots (None = auto)."""
+    state = _load()
+    cfg = state["config"]
+    action = body.get("action")
+    ids = {s["id"] for s in strategies(cfg)}
+    if action == "add":
+        try:
+            off = int(body.get("entry_offset"))
+            ce, pe = round(float(body.get("ce_pct")), 2), round(float(body.get("pe_pct")), 2)
+            vix = body.get("vix_max")
+            vix = None if vix in (None, "", "none") else round(float(vix), 1)
+        except (TypeError, ValueError):
+            raise ValueError("entry day, CE %, PE % and VIX must be numbers")
+        if off not in DAYS or not (0.5 <= ce <= 10 and 0.5 <= pe <= 10):
+            raise ValueError("entry day must be Wed/Thu/Fri/Mon and CE/PE between 0.5% and 10%")
+        if vix is not None and not 10 <= vix <= 40:
+            raise ValueError("VIX cap must be between 10 and 40")
+        c = {"id": "c" + kf.now_ist().strftime("%y%m%d%H%M%S"), "entry_offset": off, "ce_pct": ce, "pe_pct": pe,
+             "series": "next" if body.get("series") == "next" else "current",
+             "vix_max": vix, "avoid_events": bool(body.get("avoid_events"))}
+        if c["id"] in ids:
+            raise ValueError("try again in a second")
+        c["label"] = str(body.get("name") or "").strip()[:60] or _label(c)
+        cfg["custom"] = list(cfg.get("custom") or []) + [c]
+        ids.add(c["id"])
+        body = {**body, "id": c["id"]}
+    elif action == "remove":
+        sid = body.get("id")
+        keep = [c for c in cfg.get("custom") or [] if c["id"] != sid]
+        if len(keep) == len(cfg.get("custom") or []):
+            raise ValueError("only tabs you added can be removed")
+        cfg["custom"] = keep
+        state["removed"].append({"strategy": sid, "book": state["books"].pop(sid, None),
+                                 "removed_at": kf.now_ist().isoformat(timespec="seconds")})
+        cfg.get("sizing", {}).pop(sid, None)
+        _save(state)
+        return {"ok": True, "config": cfg}
+    elif action != "lots":
+        raise ValueError("action must be add | remove | lots")
+    if "lots" in body:
+        sid, lots = body.get("id"), body.get("lots")
+        if sid not in ids:
+            raise ValueError("unknown strategy")
+        sizing = dict(cfg.get("sizing") or {})
+        if lots in (None, "", "auto"):
+            sizing.pop(sid, None)
+        else:
+            n = int(float(lots))
+            if not 1 <= n <= 100:
+                raise ValueError("lots must be 1–100, or Auto")
+            sizing[sid] = n
+        cfg["sizing"] = sizing
+    _save(state)
+    return {"ok": True, "config": cfg, "id": body.get("id")}
+
+
+def lots_for(cfg: dict[str, Any], sid: str, equity: float) -> int:
+    fixed = (cfg.get("sizing") or {}).get(sid)
+    return int(fixed) if fixed else int(equity // float(cfg["margin_per_lot"]))
 
 
 def _save(state: dict[str, Any]) -> None:
@@ -156,7 +239,7 @@ def enter_due(now: datetime) -> dict[str, Any]:
     cfg = state["config"]
     if not (cfg["start_date"] <= today <= cfg["end_date"]):
         return {"ok": True, "phase": "no_entry"}
-    waiting = [s for s in STRATEGIES if not state["books"][s["id"]]["open"]
+    waiting = [s for s in strategies(cfg) if not state["books"][s["id"]]["open"]
                and state["books"][s["id"]].get("last_entry_date") != today]
     if not waiting:
         return {"ok": True, "phase": "hold"}
@@ -165,7 +248,8 @@ def enter_due(now: datetime) -> dict[str, Any]:
             return {"ok": True, "phase": "hold"}
         _warned["no_token"] = today
         return {"ok": False, "phase": "no_token", "message": "Zerodha not connected — Autoresearch Lab entry skipped"}
-    expiry = sl.upcoming_expiries(1)[0]
+    exps = sl.upcoming_expiries(2)
+    expiry = exps[0]
     if expiry <= today:
         return {"ok": True, "phase": "no_entry"}
     offset = session_offset(today, expiry)
@@ -198,14 +282,18 @@ def enter_due(now: datetime) -> dict[str, Any]:
                 book["last_entry_date"] = today
                 skipped.append(s["id"])
                 continue
-        lots = int(_equity(cfg, book) // float(cfg["margin_per_lot"]))
+        lots = lots_for(cfg, s["id"], _equity(cfg, book))
+        sell_exp = exps[1] if s.get("series") == "next" and len(exps) > 1 else expiry
+        if s.get("series") == "next" and sell_exp == expiry:
+            failed.append(f"{s['id']}: next-week expiry unavailable")
+            continue
         if lots <= 0:
             failed.append(f"{s['id']}: equity below one lot of margin")
             continue
         try:
             legs = {}
             for key, opt, side, pct in (("ce", "CE", "+", s["ce_pct"]), ("pe", "PE", "-", s["pe_pct"])):
-                c = sl._contract(opt, sl.otm_strike(spot, pct, side), expiry)
+                c = sl._contract(opt, sl.otm_strike(spot, pct, side), sell_exp)
                 px = kf.nfo_ltp(c["tradingsymbol"])
                 if px <= 0:
                     raise RuntimeError(f"no LTP for {c['tradingsymbol']}")
@@ -215,7 +303,7 @@ def enter_due(now: datetime) -> dict[str, Any]:
             failed.append(f"{s['id']}: {e}")
             continue
         book["open"] = {"variant": s["id"], "entry_date": today, "entry_time": now.strftime("%H:%M"),
-                        "spot": round(spot, 2), "expiry": expiry, "exit_on": expiry, "lots": lots,
+                        "spot": round(spot, 2), "expiry": sell_exp, "exit_on": expiry, "lots": lots,
                         "qty": lots * int(cfg["lot_size"]), "status": "OPEN", "legs": legs}
         book["last_entry_date"] = today
         opened.append(s["id"])
@@ -235,13 +323,13 @@ def exit_due(now: datetime) -> dict[str, Any]:
     hhmm = now.hour * 100 + now.minute
     state = _load()
     cfg = state["config"]
-    avoid = {s["id"] for s in STRATEGIES if s.get("avoid_events")}
+    avoid = {s["id"] for s in strategies(cfg) if s.get("avoid_events")}
     closed = []
     for sid, book in state["books"].items():
         t = book.get("open")
         if not t:
             continue
-        ev = events_between(cfg, t["entry_date"], t["expiry"]) if sid in avoid and t["exit_on"] != today else []
+        ev = events_between(cfg, t["entry_date"], t["exit_on"]) if sid in avoid and t["exit_on"] != today else []
         due_ev = [e for e in ev if _last_session_before(e["date"], today) or e["date"] <= today]
         if due_ev and (1520 <= hhmm <= 1529 or (due_ev[0]["date"] <= today and 915 <= hhmm <= 1529)):
             px = {k: kf.nfo_ltp(l["tradingsymbol"]) for k, l in t["legs"].items()}
@@ -253,10 +341,15 @@ def exit_due(now: datetime) -> dict[str, Any]:
             if not all(p > 0 for p in px.values()):
                 continue
             prices, reason = px, "expiry_squareoff"
-        elif t["exit_on"] < today:
+        elif t["exit_on"] < today and t["expiry"] == t["exit_on"]:
             prices, reason = sl._settle_expired(t), "expiry_settlement"
             if prices is None:
                 continue
+        elif t["exit_on"] < today:
+            px = {k: kf.nfo_ltp(l["tradingsymbol"]) for k, l in t["legs"].items()}
+            if not all(p > 0 for p in px.values()):
+                continue
+            prices, reason = px, "late_squareoff"
         else:
             continue
         sl._close_trade(t, prices, reason, today)
@@ -283,7 +376,7 @@ def panel(with_marks: bool = True) -> dict[str, Any]:
     state = _load()
     cfg = state["config"]
     out = []
-    for s in STRATEGIES:
+    for s in strategies(cfg):
         book = state["books"][s["id"]]
         t = book.get("open")
         open_view = None
@@ -300,5 +393,8 @@ def panel(with_marks: bool = True) -> dict[str, Any]:
                     pass
         summary = sl._summary(book["trades"], float(cfg["capital"]))
         summary["equity"] = round(_equity(cfg, book), 2)
-        out.append({**s, "open": open_view, "trades": book["trades"], "skips": book["skips"], "summary": summary})
+        out.append({**s, "series": s.get("series", "current"), "tab": bool(s.get("custom")) or s["id"] in TAB_IDS,
+                    "lots_fixed": (cfg.get("sizing") or {}).get(s["id"]),
+                    "next_lots": lots_for(cfg, s["id"], summary["equity"]),
+                    "open": open_view, "trades": book["trades"], "skips": book["skips"], "summary": summary})
     return {"ok": True, "config": cfg, "strategies": out, "research": kf.A().kv_get(RESEARCH_KEY, None)}
