@@ -463,8 +463,8 @@
 /* light blue = input cells (matches OB/AIT cell-blue) */
 :is(#page-futures,#page-vol-cluster) .config-group input{background:var(--fblue);border:1px solid #999;color:var(--fbrand);font-weight:700;font-size:14px;border-radius:4px;height:40px;width:100%;padding:0 12px}
 :is(#page-futures,#page-vol-cluster) .config-group input:focus{outline:2px solid var(--fbrand);border-color:var(--fbrand)}
-/* black = derived / locked cells (matches OB/AIT cell-black) */
-:is(#f-qty-disp,#f-mincap-disp,#vc-qty-disp,#vc-mincap-disp){background:var(--fink);color:#fff;border-radius:4px;height:40px;display:flex;align-items:center;padding:0 12px;font-size:14px;font-weight:700}
+/* derived Qty / Min Capital cells use the same look as the input cells */
+:is(#f-qty-disp,#f-mincap-disp,#vc-qty-disp,#vc-mincap-disp){background:var(--fblue);border:1px solid #999;color:var(--fbrand);border-radius:4px;height:40px;display:flex;align-items:center;padding:0 12px;font-size:14px;font-weight:700}
 /* stats as sheet cells */
 :is(#page-futures,#page-vol-cluster) .stat{background:var(--fhead);border:1px solid #999;border-radius:4px;box-shadow:none}
 :is(#page-futures,#page-vol-cluster) .stat-label{color:#333;text-transform:uppercase;letter-spacing:.3px;font-size:10px}
@@ -1796,18 +1796,6 @@ if(document.getElementById('nexpw-tbody')) nexpwRecalc();
   </tr>
 </table>
 
-<!-- ROW 1c: Historical backfill (test with real past-Wednesday Kite data) -->
-<table style="margin-bottom:3px">
-  <tr>
-    <td class="cell-black" style="width:110px;font-weight:bold">Backfill Date</td>
-    <td class="cell-blue" style="width:120px"><input id="nsw-backfill-date" class="ws-inp" type="date"/></td>
-    <td class="cell-blue" style="width:220px;text-align:center;background:#fff!important">
-      <button id="nsw-backfill-btn" onclick="nswBackfill()" style="background:#1f4e79;color:#fff;border:none;border-radius:3px;padding:4px 12px;font-size:11px;font-family:Calibri,sans-serif;cursor:pointer">Fetch Historical Row</button>
-    </td>
-    <td id="nsw-backfill-status" style="text-align:left;white-space:normal;color:#555;font-size:10px">Pick a Wednesday whose following Tuesday has already passed — fetches real Kite entry (Wed 09:20) and exit (Tue 15:38) prices and adds the full 6-day-hold trade below. Paper mode only, places no order.</td>
-  </tr>
-</table>
-
 <!-- ROW 2-3: Stats -->
 <table style="margin-bottom:6px">
   <tr>
@@ -1920,29 +1908,6 @@ window.nswSyncFromDB = async function(){
 };
 
 window.nswRecalc = function(){ if(window.nswSyncFromDB) window.nswSyncFromDB(); };
-
-window.nswBackfill = async function(){
-  const dateEl = document.getElementById('nsw-backfill-date');
-  const btn = document.getElementById('nsw-backfill-btn');
-  const statusEl = document.getElementById('nsw-backfill-status');
-  const dateVal = dateEl ? dateEl.value : '';
-  if(!dateVal){ if(statusEl) statusEl.textContent = 'Pick a date first.'; return; }
-  const origLabel = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = 'Fetching from Kite...'; }
-  if(statusEl){ statusEl.style.color = '#555'; statusEl.textContent = 'Fetching real historical spot + option premiums from Kite — this can take a few seconds...'; }
-  try {
-    const d = await apiFetch('/api/nifty_strangle_w/backfill', {date: dateVal});
-    if(statusEl){
-      statusEl.style.color = d.ok ? '#1a7f37' : '#c0322b';
-      statusEl.textContent = d.message || (d.ok ? 'Done.' : 'Failed.');
-    }
-    if(d.ok && window.nswSyncFromDB) window.nswSyncFromDB();
-  } catch(e){
-    if(statusEl){ statusEl.style.color = '#c0322b'; statusEl.textContent = 'Request failed: ' + e; }
-  } finally {
-    if(btn){ btn.disabled = false; btn.textContent = origLabel; }
-  }
-};
 
 function nswRender(){
   const tbody=document.getElementById('nsw-tbody');
