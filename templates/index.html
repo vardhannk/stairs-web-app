@@ -266,7 +266,7 @@
   <button data-module="automation" data-model="ob_workstation" onclick="goto('ob-workstation')"><span class="nav-label">🎯 Options Buy</span><span class="nav-badge" id="navbadge-ob_workstation"></span></button>
   <button data-module="automation" data-model="ait_workstation" onclick="goto('ait-workstation')"><span class="nav-label">🎯 Options AIT</span><span class="nav-badge" id="navbadge-ait_workstation"></span></button>
   <button data-module="automation" data-model="nexp_workstation" onclick="goto('nexp-workstation')"><span class="nav-label">🎯 Nifty EXP</span><span class="nav-badge" id="navbadge-nexp_workstation"></span></button>
-  <button data-module="automation" data-model="nifty_strangle_w" onclick="goto('nifty-strangle-w')"><span class="nav-label">🎯 Nifty Strangle 3.5%</span><span class="nav-badge" id="navbadge-nifty_strangle_w"></span></button>
+  <button data-module="automation" data-model="nifty_strangle_w" onclick="goto('nifty-strangle-w')"><span class="nav-label">🎯 Nifty Strangles</span><span class="nav-badge" id="navbadge-nifty_strangle_w"></span></button>
   <button data-module="admin" data-model="vol_cluster" onclick="goto('vol-cluster')"><span class="nav-label">📈 VolCluster FUT</span><span class="nav-badge" id="navbadge-vol_cluster"></span></button>
   <button data-module="admin" data-model="gc_options_buy" onclick="goto('gc-options-buy')"><span class="nav-label">🎯 GC Options Buy</span><span class="nav-badge" id="navbadge-gc_options_buy"></span></button>
   <button data-module="admin" onclick="goto('strangle-lab')"><span class="nav-label">🧪 Strangle Lab</span><span class="nav-badge paper">PAPER</span></button>
@@ -1746,29 +1746,41 @@ if(document.getElementById('nexpw-tbody')) nexpwRecalc();
 
 <div id="page-nifty-strangle-w" class="page">
 <style>
-#nsw-ws *{box-sizing:border-box}
-#nsw-ws{font-family:Calibri,sans-serif;font-size:11px;color:#000}
-#nsw-ws .ws-topbar{background:#1f4e79;color:#fff;padding:6px 10px;font-size:13px;font-weight:bold;border-radius:6px 6px 0 0;margin-bottom:4px}
-#nsw-ws table{border-collapse:collapse;width:100%}
-#nsw-ws th{background:#1f4e79;color:#fff;padding:4px 6px;border:1px solid #999;text-align:center;font-size:10px;white-space:nowrap}
-#nsw-ws td{padding:3px 5px;border:1px solid #d0d0d0;text-align:center;font-size:10px;white-space:nowrap}
-#nsw-ws tr:nth-child(even){background:#f9f9f9}
-#nsw-ws tr:hover td{background:#e8f0fe}
-#nsw-ws .cell-black{background:#000!important;color:#fff!important}
-#nsw-ws .cell-blue{background:#bdd7ee!important}
-#nsw-ws .cell-note{background:#fff2cc;font-size:10px;padding:4px 8px;border:1px solid #ccc}
-#nsw-ws .cell-stats-lbl{background:#d9d9d9;font-weight:bold;font-size:10px;padding:3px 5px;border:1px solid #999}
-#nsw-ws .cell-grp{background:#1f4e79;color:#fff;font-weight:bold;font-size:11px;padding:4px 6px}
-#nsw-ws .pos{color:#1a7f37!important}
-#nsw-ws .neg{color:#c0322b!important}
-#nsw-ws .peak{background:#c6e0b4!important;color:#375623;font-weight:bold}
-#nsw-ws input.ws-inp{background:#bdd7ee;border:1px solid #999;width:100%;text-align:center;font-size:11px;font-family:Calibri,sans-serif;padding:2px 3px}
-#nsw-ws input.ws-inp:focus{outline:2px solid #1f4e79}
-#nsw-ws .overflow-x{overflow-x:auto}
-#nsw-ws .pct-wrap{position:relative}
-#nsw-ws .pct-wrap input.ws-inp{padding-right:16px}
-#nsw-ws .pct-wrap .pct-suffix{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;pointer-events:none}
+:is(#nsw-ws,#nst-ws) *{box-sizing:border-box}
+:is(#nsw-ws,#nst-ws){font-family:Calibri,sans-serif;font-size:11px;color:#000}
+:is(#nsw-ws,#nst-ws) .ws-topbar{background:#1f4e79;color:#fff;padding:6px 10px;font-size:13px;font-weight:bold;border-radius:6px 6px 0 0;margin-bottom:4px}
+:is(#nsw-ws,#nst-ws) table{border-collapse:collapse;width:100%}
+:is(#nsw-ws,#nst-ws) th{background:#1f4e79;color:#fff;padding:4px 6px;border:1px solid #999;text-align:center;font-size:10px;white-space:nowrap}
+:is(#nsw-ws,#nst-ws) td{padding:3px 5px;border:1px solid #d0d0d0;text-align:center;font-size:10px;white-space:nowrap}
+:is(#nsw-ws,#nst-ws) tr:nth-child(even){background:#f9f9f9}
+:is(#nsw-ws,#nst-ws) tr:hover td{background:#e8f0fe}
+:is(#nsw-ws,#nst-ws) .cell-black{background:#000!important;color:#fff!important}
+:is(#nsw-ws,#nst-ws) .cell-blue{background:#bdd7ee!important}
+:is(#nsw-ws,#nst-ws) .cell-note{background:#fff2cc;font-size:10px;padding:4px 8px;border:1px solid #ccc}
+:is(#nsw-ws,#nst-ws) .cell-stats-lbl{background:#d9d9d9;font-weight:bold;font-size:10px;padding:3px 5px;border:1px solid #999}
+:is(#nsw-ws,#nst-ws) .cell-grp{background:#1f4e79;color:#fff;font-weight:bold;font-size:11px;padding:4px 6px}
+:is(#nsw-ws,#nst-ws) .pos{color:#1a7f37!important}
+:is(#nsw-ws,#nst-ws) .neg{color:#c0322b!important}
+:is(#nsw-ws,#nst-ws) .peak{background:#c6e0b4!important;color:#375623;font-weight:bold}
+:is(#nsw-ws,#nst-ws) input.ws-inp{background:#bdd7ee;border:1px solid #999;width:100%;text-align:center;font-size:11px;font-family:Calibri,sans-serif;padding:2px 3px}
+:is(#nsw-ws,#nst-ws) input.ws-inp:focus{outline:2px solid #1f4e79}
+:is(#nsw-ws,#nst-ws) .overflow-x{overflow-x:auto}
+:is(#nsw-ws,#nst-ws) .pct-wrap{position:relative}
+:is(#nsw-ws,#nst-ws) .pct-wrap input.ws-inp{padding-right:16px}
+:is(#nsw-ws,#nst-ws) .pct-wrap .pct-suffix{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;pointer-events:none}
+.nst-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;font-family:Calibri,sans-serif}
+.nst-tabs button{background:#d9d9d9;border:1px solid #999;border-bottom:3px solid transparent;padding:6px 14px;font-size:12px;font-weight:bold;cursor:pointer;border-radius:6px 6px 0 0;color:#333}
+.nst-tabs button.on{background:#1f4e79;color:#fff;border-bottom-color:#c0322b}
+.nst-mode{display:inline-block;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:bold;margin-left:6px;vertical-align:middle}
+.nst-mode.paper{background:#bdd7ee;color:#1f4e79}.nst-mode.live{background:#1a7f37;color:#fff}.nst-mode.off{background:#999;color:#fff}
+#nst-ws .nst-book button{background:#fff;border:1px solid #999;padding:2px 10px;font-size:11px;cursor:pointer}
+#nst-ws .nst-book button.on{background:#1f4e79;color:#fff}
 </style>
+<div class="nst-tabs" id="nst-tabs">
+  <button class="on" data-tab="nsw" onclick="nstTab('nsw')">Nifty Strangle 3.5%</button>
+  <button data-tab="thu30ve" onclick="nstTab('thu30ve')" style="display:none">Thu 3.0% · VIX ≤ 20 · no event weeks</button>
+  <button data-tab="thu25ve" onclick="nstTab('thu25ve')" style="display:none">Thu 2.5% · VIX ≤ 20 · no event weeks</button>
+</div>
 <div id="nsw-ws">
 <div class="ws-topbar">🎯 Nifty Strangle 3.5% — Weekly Short Strangle · Wed 09:20 AM entry → next Tue ~15:38 PM square-off (held through expiry) &nbsp;|&nbsp; "It's not what you make. It's what you keep."</div>
 
@@ -1854,6 +1866,67 @@ if(document.getElementById('nexpw-tbody')) nexpwRecalc();
   <tbody id="nsw-tbody"></tbody>
 </table>
 </div>
+</div>
+
+<div id="nst-ws" style="display:none">
+<div class="ws-topbar" id="nst-topbar"></div>
+<table style="margin-bottom:3px">
+  <tr>
+    <td class="cell-black" style="width:110px;font-weight:bold">Start Capital</td>
+    <td class="cell-blue" style="width:120px" id="nst-cap">—</td>
+    <td class="cell-black" style="width:100px;font-weight:bold">Next Lots</td>
+    <td class="cell-blue" style="width:80px" id="nst-lots">—</td>
+    <td class="cell-black" style="width:100px;font-weight:bold">Margin / Lot</td>
+    <td class="cell-blue" style="width:100px" id="nst-margin">—</td>
+    <td class="cell-black" style="width:90px;font-weight:bold">Mode</td>
+    <td style="width:170px" id="nst-mode">—</td>
+    <td class="cell-black" style="width:90px;font-weight:bold">Book</td>
+    <td class="nst-book" style="width:150px" id="nst-book"></td>
+  </tr>
+</table>
+<table style="margin-bottom:3px">
+  <tr>
+    <td class="cell-black" style="width:110px;font-weight:bold">CE Strike (OTM %)</td>
+    <td class="cell-blue" style="width:80px" id="nst-ce">—</td>
+    <td class="cell-black" style="width:110px;font-weight:bold">PE Strike (OTM %)</td>
+    <td class="cell-blue" style="width:80px" id="nst-pe">—</td>
+    <td class="cell-black" style="width:80px;font-weight:bold">Entry</td>
+    <td class="cell-black" style="width:240px">Thu 09:20 AM IST (skip if VIX open &gt; 20)</td>
+    <td class="cell-black" style="width:90px;font-weight:bold">Square-off</td>
+    <td class="cell-black" style="width:240px">Tue expiry, held to settlement</td>
+    <td class="cell-black" style="width:90px;font-weight:bold">Event weeks</td>
+    <td class="cell-black" style="width:240px">Skipped · open trade exits 15:20 day before</td>
+  </tr>
+</table>
+<table style="margin-bottom:6px">
+  <tr>
+    <td class="cell-stats-lbl">Lot Size</td><td class="cell-stats-lbl">Curr Cap</td><td class="cell-stats-lbl">Returns</td>
+    <td class="cell-stats-lbl">Max DD</td><td class="cell-stats-lbl">Trades Won</td><td class="cell-stats-lbl">Trades Lost</td>
+    <td class="cell-stats-lbl">Win Ratio</td><td class="cell-stats-lbl">Biggest Win</td><td class="cell-stats-lbl">Biggest Loss</td>
+    <td class="cell-stats-lbl">Weeks Skipped</td>
+  </tr>
+  <tr id="nst-stats"></tr>
+</table>
+<div class="cell-note" id="nst-msg" style="margin-bottom:6px;display:none"></div>
+<div class="overflow-x">
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">#</th><th rowspan="2">Entry Date</th><th rowspan="2">Spot</th><th rowspan="2">Expiry</th><th rowspan="2">Qty</th>
+      <th colspan="3" class="cell-grp">CE Leg (Sell)</th><th colspan="3" class="cell-grp">PE Leg (Sell)</th>
+      <th rowspan="2">Exit Date</th><th rowspan="2">Exit Reason</th><th rowspan="2">Profit / Loss</th><th rowspan="2">Current Capital</th>
+      <th rowspan="2">Return on<br>Capital</th><th rowspan="2">Max Capital</th><th rowspan="2">Drawdown</th><th rowspan="2">New Peak</th>
+    </tr>
+    <tr><th>Strike</th><th>Entry</th><th>Exit</th><th>Strike</th><th>Entry</th><th>Exit</th></tr>
+  </thead>
+  <tbody id="nst-tbody"></tbody>
+</table>
+</div>
+<div class="ws-topbar" style="margin-top:10px">Skipped weeks</div>
+<table>
+  <thead><tr><th>#</th><th>Date</th><th>Expiry</th><th>Reason</th></tr></thead>
+  <tbody id="nst-skips"></tbody>
+</table>
 </div>
 
 <script>
@@ -1963,6 +2036,93 @@ function nswRenderStats(summary, startCap){
 
 // Init — only render if page elements exist
 if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
+})();
+</script>
+<script>
+(function(){
+var nst={tab:'nsw',book:null,data:null};
+function f(n,d){ if(d==null)d=2; return n==null||isNaN(n)?'':Number(n).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function pc(n){ return n==null||isNaN(n)?'':Number(n).toFixed(2)+'%'; }
+function dt(d){ if(!d)return''; try{return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});}catch(e){return d;} }
+function sg(n){ return n==null?'':(n>=0?'pos':'neg'); }
+function leg(l,k){ return l&&l[k]!=null?f(l[k]):''; }
+
+window.nstTab=function(tab){
+  nst.tab=tab; nst.book=null;
+  document.querySelectorAll('#nst-tabs button').forEach(function(b){ b.classList.toggle('on',b.dataset.tab===tab); });
+  document.getElementById('nsw-ws').style.display=tab==='nsw'?'':'none';
+  document.getElementById('nst-ws').style.display=tab==='nsw'?'none':'';
+  if(tab==='nsw'){ if(window.nswSyncFromDB) window.nswSyncFromDB(); } else window.nstLoad();
+};
+window.nstBook=function(b){ nst.book=b; nstRender(); };
+window.nstLoad=async function(){
+  if(nst.tab==='nsw') return;
+  try{ var r=await fetch('/api/autoresearch-lab'); nst.data=await r.json(); }
+  catch(e){ nst.data={ok:false,message:'Failed to load: '+e}; }
+  nstRender();
+};
+
+function nstRender(){
+  var d=nst.data||{}, c=d.config||{}, msg=document.getElementById('nst-msg');
+  var s=(d.strategies||[]).filter(function(x){ return x.id===nst.tab; })[0];
+  if(!d.ok||!s){ msg.style.display=''; msg.textContent=d.message||'Not available.'; return; }
+  var mode=s.mode||'paper', book=nst.book||(mode==='live'?'live':'paper');
+  var b=book==='live'?(s.live||{}):s, sm=b.summary||{}, cap=Number(c.capital)||0;
+  var eq=sm.equity!=null?Number(sm.equity):cap;
+  document.getElementById('nst-topbar').innerHTML='🎯 Nifty Strangle '+s.label+' — Weekly Short Strangle · tracking '+dt(c.start_date)+' → '+dt(c.end_date)+
+    ' &nbsp;|&nbsp; '+(book==='live'?'LIVE book':'PAPER book');
+  document.getElementById('nst-cap').textContent='₹'+f(cap,0);
+  document.getElementById('nst-lots').textContent=Math.floor(eq/(Number(c.margin_per_lot)||1));
+  document.getElementById('nst-margin').textContent='₹'+f(c.margin_per_lot,0);
+  document.getElementById('nst-ce').textContent=s.ce_pct+'%';
+  document.getElementById('nst-pe').textContent=s.pe_pct+'%';
+  document.getElementById('nst-mode').innerHTML='<span class="nst-mode '+mode+'">'+mode.toUpperCase()+'</span> <a href="/go-live" style="font-size:10px">switch on Go-Live</a>';
+  document.getElementById('nst-book').innerHTML=['paper','live'].map(function(k){
+    return '<button class="'+(k===book?'on':'')+'" onclick="nstBook(\''+k+'\')">'+(k==='paper'?'Paper':'Live')+'</button>'; }).join(' ');
+  var n=(sm.wins||0)+(sm.losses||0), ret=cap?(eq-cap)/cap*100:0, skips=b.skips||[];
+  document.getElementById('nst-stats').innerHTML=
+    '<td class="cell-black">'+(c.lot_size||'')+'</td><td class="cell-black">₹'+f(eq,0)+'</td>'+
+    '<td class="'+sg(ret)+'">'+pc(ret)+'</td><td class="'+sg(sm.max_dd_pct||0)+'">'+pc(sm.max_dd_pct||0)+'</td>'+
+    '<td>'+(sm.wins||0)+'</td><td>'+(sm.losses||0)+'</td><td>'+pc(n?(sm.wins||0)/n*100:0)+'</td>'+
+    '<td class="pos">₹'+f(sm.best||0)+'</td><td class="neg">₹'+f(sm.worst||0)+'</td><td>'+skips.length+'</td>';
+  var notes=[];
+  if(!d.connected) notes.push('Zerodha not connected — entries and exits need the admin token.');
+  if(book==='live'&&mode!=='live') notes.push('Live book — this strategy is in '+mode.toUpperCase()+' mode, so no live orders are placed. Switch it on the Go-Live page.');
+  if(b.open&&b.open.partial) notes.push('Open live trade has only one leg — the other leg\'s order failed. Check Zerodha.');
+  msg.style.display=notes.length?'':'none'; msg.textContent=notes.join(' ');
+  var trades=(b.trades||[]).slice().sort(function(x,y){ return x.entry_date<y.entry_date?-1:1; });
+  var run=cap, peak=cap, html=trades.map(function(t,i){
+    var p=Number(t.pnl)||0, prev=run; run+=p; var newPeak=run>peak; peak=Math.max(peak,run);
+    var L=t.legs||{};
+    return '<tr><td>'+(i+1)+'</td><td>'+dt(t.entry_date)+'</td><td>'+f(t.spot,0)+'</td><td>'+dt(t.expiry)+'</td><td class="cell-black">'+f(t.qty,0)+'</td>'+
+      '<td class="cell-black">'+(L.ce?L.ce.strike:'')+'</td><td>'+leg(L.ce,'entry_price')+'</td><td>'+leg(L.ce,'exit_price')+'</td>'+
+      '<td class="cell-black">'+(L.pe?L.pe.strike:'')+'</td><td>'+leg(L.pe,'entry_price')+'</td><td>'+leg(L.pe,'exit_price')+'</td>'+
+      '<td>'+dt(t.exit_date)+'</td><td>'+(t.exit_reason||'').replace(/_/g,' ')+'</td><td class="'+sg(p)+'">₹'+f(p)+'</td>'+
+      '<td class="cell-black">₹'+f(run,0)+'</td><td class="'+sg(p)+'">'+pc(prev?p/prev*100:0)+'</td><td>₹'+f(peak,0)+'</td>'+
+      '<td class="'+(run<peak?'neg':'')+'">'+pc(peak?(run-peak)/peak*100:0)+'</td><td class="'+(newPeak?'peak':'')+'">'+(newPeak?'New Peak':'')+'</td></tr>';
+  }).join('');
+  var o=b.open;
+  if(o){
+    var L=o.legs||{}, op=o.open_pnl;
+    html+='<tr style="font-weight:bold"><td>'+(trades.length+1)+'</td><td>'+dt(o.entry_date)+'</td><td>'+f(o.spot,0)+'</td><td>'+dt(o.expiry)+'</td><td class="cell-black">'+f(o.qty,0)+'</td>'+
+      '<td class="cell-black">'+(L.ce?L.ce.strike:'')+'</td><td>'+leg(L.ce,'entry_price')+'</td><td>'+(o.marks&&o.marks.ce?f(o.marks.ce)+' (LTP)':'')+'</td>'+
+      '<td class="cell-black">'+(L.pe?L.pe.strike:'')+'</td><td>'+leg(L.pe,'entry_price')+'</td><td>'+(o.marks&&o.marks.pe?f(o.marks.pe)+' (LTP)':'')+'</td>'+
+      '<td>OPEN</td><td>'+(o.mode==='live'?'live position':'paper')+'</td><td class="'+sg(op)+'">'+(op!=null?'₹'+f(op)+' (open)':'')+'</td>'+
+      '<td colspan="5"></td></tr>';
+  }
+  document.getElementById('nst-tbody').innerHTML=html||'<tr><td colspan="19" style="padding:10px">No trades yet — the first Thursday entry is after '+dt(c.start_date)+'.</td></tr>';
+  document.getElementById('nst-skips').innerHTML=skips.slice().reverse().map(function(k,i){
+    var why=k.reason==='event'?'Event week: '+k.event+' ('+dt(k.event_date)+')':(k.reason==='vix'?'VIX open '+k.vix+' > 20':k.reason);
+    return '<tr><td>'+(skips.length-i)+'</td><td>'+dt(k.date)+'</td><td>'+dt(k.expiry)+'</td><td>'+why+'</td></tr>';
+  }).join('')||'<tr><td colspan="4" style="padding:8px">No weeks skipped yet.</td></tr>';
+}
+
+setTimeout(function(){
+  fetch('/api/me').then(function(r){ return r.json(); }).then(function(d){
+    if(!d||!d.is_admin) return;
+    document.querySelectorAll('#nst-tabs button').forEach(function(b){ b.style.display=''; });
+  }).catch(function(){});
+}, 900);
 })();
 </script>
 </div>
@@ -2955,6 +3115,7 @@ function goto(id){
   if(id==='nifty-strangle-w' && typeof window.nswSyncFromDB==='function'){
     setTimeout(window.nswSyncFromDB, 100);
   }
+  if(id==='nifty-strangle-w' && typeof window.nstLoad==='function') window.nstLoad();
   pages.forEach(p=>p.classList.remove('active'));
   navBtns.forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
@@ -4759,6 +4920,7 @@ function resyncVisibleWorkstation(){
     ['page-ait-workstation',  'aitwSyncFromDB'],
     ['page-nexp-workstation', 'nexpwSyncFromDB'],
     ['page-nifty-strangle-w', 'nswSyncFromDB'],
+    ['page-nifty-strangle-w', 'nstLoad'],
   ];
   syncs.forEach(function(pair){
     var el = document.getElementById(pair[0]);

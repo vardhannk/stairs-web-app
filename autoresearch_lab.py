@@ -8,7 +8,13 @@ with no stop. Strategies with a vix_max skip the week when the India VIX day
 open is above it. Sizing matches the backtest: every strategy compounds its own
 equity from ₹10L, lots = floor(equity / margin_per_lot).
 
-Prices are Kite LTPs on the admin account. No order function is ever called.
+Prices are Kite LTPs on the admin account. Strategies with a `model` id are
+also listed on the Go-Live board: in Paper (the default) they only record, Off
+stops new entries, and Live sells the legs on the admin account through the
+app's live gate into a separate live book. Live expiry exits place no order —
+the contracts settle at the exchange — so real orders go out only at entry,
+on an event-week exit before 15:30, and on Kill & Exit. The other strategies
+never place orders.
 """
 
 from __future__ import annotations
@@ -34,10 +40,11 @@ STRATEGIES = [
     {"id": "wed1025v", "entry_offset": 0, "ce_pct": 1.0, "pe_pct": 2.5, "vix_max": 20,
      "label": "Wed · CE 1.0% / PE 2.5%, VIX ≤ 20 (DD 25% pick*)"},
     {"id": "thu30ve", "entry_offset": 1, "ce_pct": 3.0, "pe_pct": 3.0, "vix_max": 20, "avoid_events": True,
-     "label": "Thu · 3.0% / 3.0%, VIX ≤ 20, no event weeks (2019–26 pick)"},
+     "model": "ar_thu30ve", "label": "Thu · 3.0% / 3.0%, VIX ≤ 20, no event weeks (2019–26 pick)"},
     {"id": "thu25ve", "entry_offset": 1, "ce_pct": 2.5, "pe_pct": 2.5, "vix_max": 20, "avoid_events": True,
-     "label": "Thu · 2.5% / 2.5%, VIX ≤ 20, no event weeks (2019–26 higher CAGR)"},
+     "model": "ar_thu25ve", "label": "Thu · 2.5% / 2.5%, VIX ≤ 20, no event weeks (2019–26 higher CAGR)"},
 ]
+STRATEGY_BY_MODEL = {s["model"]: s for s in STRATEGIES if s.get("model")}
 
 _warned = {"no_token": None}
 
@@ -57,10 +64,22 @@ def _load() -> dict[str, Any]:
     data = kf.A().kv_get(BOOK_KEY, None) or {}
     cfg = {**DEFAULT_CONFIG, **(data.get("config") or {})}
     books = data.get("books") or {}
+    live_books = data.get("live_books") or {}
     for s in STRATEGIES:
         books.setdefault(s["id"], {"open": None, "trades": [], "last_entry_date": None})
         books[s["id"]].setdefault("skips", [])
-    return {"config": cfg, "books": books}
+        if s.get("model"):
+            live_books.setdefault(s["id"], {"open": None, "trades": [], "last_entry_date": None, "skips": []})
+    return {"config": cfg, "books": books, "live_books": live_books}
+
+
+def mode(s: dict[str, Any]) -> str:
+    """off / paper / live from the Go-Live board; lab-only strategies are always paper."""
+    return kf.model_mode(s["model"]) if s.get("model") else "paper"
+
+
+def _target_book(state: dict[str, Any], s: dict[str, Any], md: str) -> dict[str, Any]:
+    return state["live_books"][s["id"]] if md == "live" else state["books"][s["id"]]
 
 
 def _save(state: dict[str, Any]) -> None:
@@ -156,8 +175,10 @@ def enter_due(now: datetime) -> dict[str, Any]:
     cfg = state["config"]
     if not (cfg["start_date"] <= today <= cfg["end_date"]):
         return {"ok": True, "phase": "no_entry"}
-    waiting = [s for s in STRATEGIES if not state["books"][s["id"]]["open"]
-               and state["books"][s["id"]].get("last_entry_date") != today]
+    modes = {s["id"]: mode(s) for s in STRATEGIES}
+    waiting = [s for s in STRATEGIES if modes[s["id"]] != "off"
+               and not _target_book(state, s, modes[s["id"]])["open"]
+               and _target_book(state, s, modes[s["id"]]).get("last_entry_date") != today]
     if not waiting:
         return {"ok": True, "phase": "hold"}
     if not kf.connected():
@@ -178,7 +199,8 @@ def enter_due(now: datetime) -> dict[str, Any]:
     opened, failed, skipped = [], [], []
     vix = None
     for s in due:
-        book = state["books"][s["id"]]
+        md = modes[s["id"]]
+        book = _target_book(state, s, md)
         if s.get("avoid_events"):
             hit = events_between(cfg, today, expiry)
             if hit:
@@ -214,18 +236,39 @@ def enter_due(now: datetime) -> dict[str, Any]:
         except Exception as e:
             failed.append(f"{s['id']}: {e}")
             continue
-        book["open"] = {"variant": s["id"], "entry_date": today, "entry_time": now.strftime("%H:%M"),
-                        "spot": round(spot, 2), "expiry": expiry, "exit_on": expiry, "lots": lots,
-                        "qty": lots * int(cfg["lot_size"]), "status": "OPEN", "legs": legs}
+        qty = lots * int(cfg["lot_size"])
+        trade = {"variant": s["id"], "entry_date": today, "entry_time": now.strftime("%H:%M"),
+                 "spot": round(spot, 2), "expiry": expiry, "exit_on": expiry, "lots": lots,
+                 "qty": qty, "status": "OPEN", "mode": "paper", "legs": legs}
+        if md == "live":
+            # One attempt per leg, never retried. A leg whose order fails is dropped;
+            # if both fail nothing is recorded and the week is not re-entered.
+            book["last_entry_date"] = today
+            for key in list(legs):
+                leg = legs[key]
+                res = kf.place(s["model"], "SELL", leg["tradingsymbol"], qty, leg["entry_price"], f"entry_{key}")
+                if res.get("ok"):
+                    leg.update({"entry_price": round(float(res["fill_price"]), 2),
+                                "entry_order_id": res.get("order_id"), "mode": res.get("mode")})
+                else:
+                    failed.append(f"{s['id']} {key.upper()} sell: {res.get('message')}")
+                    legs.pop(key)
+            if not legs:
+                continue
+            trade["mode"] = "live" if any(l.get("mode") == "live" for l in legs.values()) else "paper"
+            if len(legs) < 2:
+                trade["partial"] = True
+        book["open"] = trade
         book["last_entry_date"] = today
-        opened.append(s["id"])
+        opened.append(s["id"] + (" (LIVE)" if md == "live" else ""))
     _save(state)
     if opened:
         kf.log(f"{LABEL}: opened {', '.join(opened)} @ spot {spot:.2f}", details={"failed": failed})
     if skipped:
         kf.log(f"{LABEL}: skipped {', '.join(skipped)} (VIX cap or event week)", details={"vix": vix})
     if failed:
-        kf.log(f"{LABEL}: entry failed for {'; '.join(failed)}", level="WARNING")
+        live_fail = any(" sell: " in f for f in failed)
+        kf.log(f"{LABEL}: entry failed for {'; '.join(failed)}", level="ERROR" if live_fail else "WARNING")
     return {"ok": not failed, "phase": "entered" if opened else "no_entry", "opened": opened,
             "skipped": skipped, "failed": failed}
 
@@ -236,8 +279,10 @@ def exit_due(now: datetime) -> dict[str, Any]:
     state = _load()
     cfg = state["config"]
     avoid = {s["id"] for s in STRATEGIES if s.get("avoid_events")}
-    closed = []
-    for sid, book in state["books"].items():
+    closed, failed = [], []
+    books = [(sid, b, False) for sid, b in state["books"].items()] + \
+            [(sid, b, True) for sid, b in state["live_books"].items()]
+    for sid, book, is_live in books:
         t = book.get("open")
         if not t:
             continue
@@ -248,13 +293,19 @@ def exit_due(now: datetime) -> dict[str, Any]:
             if not all(p > 0 for p in px.values()):
                 continue
             prices, reason = px, f"event_exit: {due_ev[0]['name']}"
+            if is_live and t.get("mode") == "live":
+                prices, err = _buy_back(sid, t, px, "event_exit")
+                if err:
+                    failed.append(f"{sid}: {err}")
+                    _save(state)
+                    continue
         elif t["exit_on"] == today and 1531 <= hhmm <= 1538:
             px = {k: kf.nfo_ltp(l["tradingsymbol"]) for k, l in t["legs"].items()}
             if not all(p > 0 for p in px.values()):
                 continue
             prices, reason = px, "expiry_squareoff"
         elif t["exit_on"] < today:
-            prices, reason = sl._settle_expired(t), "expiry_settlement"
+            prices, reason = _settle_expired(t), "expiry_settlement"
             if prices is None:
                 continue
         else:
@@ -262,11 +313,49 @@ def exit_due(now: datetime) -> dict[str, Any]:
         sl._close_trade(t, prices, reason, today)
         book["trades"].append(t)
         book["open"] = None
-        closed.append(sid)
-    if closed:
+        closed.append(sid + (" (live book)" if is_live else ""))
+    if closed or failed:
         _save(state)
+    if closed:
         kf.log(f"{LABEL}: closed {', '.join(closed)}")
-    return {"ok": True, "phase": "exited" if closed else "hold", "closed": closed}
+    if failed:
+        kf.log(f"{LABEL}: live exit order failed — {'; '.join(failed)}", level="ERROR")
+    return {"ok": not failed, "phase": "exited" if closed else ("exit_failed" if failed else "hold"),
+            "closed": closed, "failed": failed}
+
+
+def _settle_expired(trade: dict[str, Any]) -> dict[str, float] | None:
+    """Intrinsic value at the expiry-day NIFTY close (handles a one-legged live trade)."""
+    try:
+        bars = kf.index_bars(kf.NIFTY_TOKEN, "day", 20, max_age_s=600)
+        close = float(bars[bars.index.strftime("%Y-%m-%d") == trade["exit_on"]]["close"].iloc[-1])
+    except Exception:
+        return None
+    return {k: max(close - l["strike"], 0.0) if l["option_type"] == "CE" else max(l["strike"] - close, 0.0)
+            for k, l in trade["legs"].items()}
+
+
+def _buy_back(sid: str, t: dict[str, Any], marks: dict[str, float], tag: str):
+    """Buy back every still-short leg of a live trade, sized from Zerodha's actual net
+    position so a leg that is already flat gets no order. Legs already bought back keep
+    their fill, so a later pass only touches what is still open. Returns (prices, error)."""
+    model = next(s["model"] for s in STRATEGIES if s["id"] == sid)
+    for key, leg in t["legs"].items():
+        if leg.get("exit_fill") is not None:
+            continue
+        net = kf.broker_net_qty(leg["tradingsymbol"])
+        if net is None:
+            return None, f"could not read Zerodha position for {leg['tradingsymbol']}"
+        if net >= 0:
+            leg["exit_fill"] = marks[key]
+            leg["exit_note"] = "already flat at broker — no order"
+            continue
+        res = kf.place(model, "BUY", leg["tradingsymbol"], min(-net, int(t["qty"])), marks[key], f"{tag}_{key}")
+        if not res.get("ok"):
+            return None, f"{key.upper()} buy: {res.get('message')}"
+        leg["exit_fill"] = round(float(res["fill_price"]), 2)
+        leg["exit_order_id"] = res.get("order_id")
+    return {k: float(l["exit_fill"]) for k, l in t["legs"].items()}, None
 
 
 def tick(now: datetime | None = None) -> dict[str, Any]:
@@ -279,25 +368,70 @@ def tick(now: datetime | None = None) -> dict[str, Any]:
     return res
 
 
+def _book_view(cfg: dict[str, Any], book: dict[str, Any], with_marks: bool) -> dict[str, Any]:
+    t = book.get("open")
+    open_view = None
+    if t:
+        open_view = dict(t)
+        if with_marks and kf.connected():
+            try:
+                marks = {k: kf.nfo_ltp(l["tradingsymbol"]) for k, l in t["legs"].items()}
+                if all(m > 0 for m in marks.values()):
+                    open_view["marks"] = marks
+                    open_view["open_pnl"] = round(sum((float(l["entry_price"]) - marks[k]) * int(t["qty"])
+                                                      for k, l in t["legs"].items()), 2)
+            except Exception:
+                pass
+    summary = sl._summary(book["trades"], float(cfg["capital"]))
+    summary["equity"] = round(_equity(cfg, book), 2)
+    return {"open": open_view, "trades": book["trades"], "skips": book["skips"], "summary": summary}
+
+
 def panel(with_marks: bool = True) -> dict[str, Any]:
     state = _load()
     cfg = state["config"]
     out = []
     for s in STRATEGIES:
-        book = state["books"][s["id"]]
-        t = book.get("open")
-        open_view = None
-        if t:
-            open_view = dict(t)
-            if with_marks and kf.connected():
-                try:
-                    marks = {k: kf.nfo_ltp(l["tradingsymbol"]) for k, l in t["legs"].items()}
-                    if all(m > 0 for m in marks.values()):
-                        open_view["open_pnl"] = round(sum((float(l["entry_price"]) - marks[k]) * int(t["qty"])
-                                                          for k, l in t["legs"].items()), 2)
-                except Exception:
-                    pass
-        summary = sl._summary(book["trades"], float(cfg["capital"]))
-        summary["equity"] = round(_equity(cfg, book), 2)
-        out.append({**s, "open": open_view, "trades": book["trades"], "skips": book["skips"], "summary": summary})
+        row = {**s, **_book_view(cfg, state["books"][s["id"]], with_marks)}
+        if s.get("model"):
+            row["mode"] = mode(s)
+            row["live"] = _book_view(cfg, state["live_books"][s["id"]], with_marks)
+        out.append(row)
     return {"ok": True, "config": cfg, "strategies": out, "research": kf.A().kv_get(RESEARCH_KEY, None)}
+
+
+class GoLive:
+    """Go-Live board hooks for one shortlisted strategy (open count + Kill & Exit)."""
+
+    def __init__(self, model: str):
+        self.s = STRATEGY_BY_MODEL[model]
+
+    def open_count(self) -> int:
+        state = _load()
+        md = mode(self.s)
+        return 0 if md == "off" else int(bool(_target_book(state, self.s, md).get("open")))
+
+    def kill_exit(self) -> int:
+        """Close the live book's open trade now. Paper trades are left to run."""
+        state = _load()
+        book = state["live_books"][self.s["id"]]
+        t = book.get("open")
+        if not t:
+            return 0
+        today = kf.today_ist()
+        marks = {k: kf.nfo_ltp(l["tradingsymbol"]) for k, l in t["legs"].items()}
+        if t.get("mode") == "live":
+            prices, err = _buy_back(self.s["id"], t, marks, "kill_exit")
+            if err:
+                _save(state)
+                kf.log(f"{LABEL}: kill-exit failed for {self.s['id']} — {err}", level="ERROR")
+                return 0
+        else:
+            prices = marks
+        prices = {k: float(p) if float(p) > 0 else float(t["legs"][k]["entry_price"]) for k, p in prices.items()}
+        sl._close_trade(t, prices, "kill_exit", today)
+        book["trades"].append(t)
+        book["open"] = None
+        _save(state)
+        kf.log(f"{LABEL}: kill-exit closed {self.s['id']} (live book)")
+        return 1
