@@ -1771,10 +1771,6 @@ if(document.getElementById('nexpw-tbody')) nexpwRecalc();
 .nst-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;font-family:Calibri,sans-serif}
 .nst-tabs button{background:#d9d9d9;border:1px solid #999;border-bottom:3px solid transparent;padding:6px 14px;font-size:12px;font-weight:bold;cursor:pointer;border-radius:6px 6px 0 0;color:#333}
 .nst-tabs button.on{background:#1f4e79;color:#fff;border-bottom-color:#c0322b}
-.nst-mode{display:inline-block;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:bold;margin-left:6px;vertical-align:middle}
-.nst-mode.paper{background:#bdd7ee;color:#1f4e79}.nst-mode.live{background:#1a7f37;color:#fff}.nst-mode.off{background:#999;color:#fff}
-#nst-ws .nst-book button{background:#fff;border:1px solid #999;padding:2px 10px;font-size:11px;cursor:pointer}
-#nst-ws .nst-book button.on{background:#1f4e79;color:#fff}
 </style>
 <div class="nst-tabs" id="nst-tabs">
   <button class="on" data-tab="nsw" onclick="nstTab('nsw')">Nifty Strangle 3.5%</button>
@@ -1878,10 +1874,6 @@ if(document.getElementById('nexpw-tbody')) nexpwRecalc();
     <td class="cell-blue" style="width:80px" id="nst-lots">—</td>
     <td class="cell-black" style="width:100px;font-weight:bold">Margin / Lot</td>
     <td class="cell-blue" style="width:100px" id="nst-margin">—</td>
-    <td class="cell-black" style="width:90px;font-weight:bold">Mode</td>
-    <td style="width:170px" id="nst-mode">—</td>
-    <td class="cell-black" style="width:90px;font-weight:bold">Book</td>
-    <td class="nst-book" style="width:150px" id="nst-book"></td>
   </tr>
 </table>
 <table style="margin-bottom:3px">
@@ -2040,7 +2032,7 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
 </script>
 <script>
 (function(){
-var nst={tab:'nsw',book:null,data:null};
+var nst={tab:'nsw',data:null};
 function f(n,d){ if(d==null)d=2; return n==null||isNaN(n)?'':Number(n).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function pc(n){ return n==null||isNaN(n)?'':Number(n).toFixed(2)+'%'; }
 function dt(d){ if(!d)return''; try{return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});}catch(e){return d;} }
@@ -2048,13 +2040,12 @@ function sg(n){ return n==null?'':(n>=0?'pos':'neg'); }
 function leg(l,k){ return l&&l[k]!=null?f(l[k]):''; }
 
 window.nstTab=function(tab){
-  nst.tab=tab; nst.book=null;
+  nst.tab=tab;
   document.querySelectorAll('#nst-tabs button').forEach(function(b){ b.classList.toggle('on',b.dataset.tab===tab); });
   document.getElementById('nsw-ws').style.display=tab==='nsw'?'':'none';
   document.getElementById('nst-ws').style.display=tab==='nsw'?'none':'';
   if(tab==='nsw'){ if(window.nswSyncFromDB) window.nswSyncFromDB(); } else window.nstLoad();
 };
-window.nstBook=function(b){ nst.book=b; nstRender(); };
 window.nstLoad=async function(){
   if(nst.tab==='nsw') return;
   try{ var r=await fetch('/api/autoresearch-lab'); nst.data=await r.json(); }
@@ -2066,19 +2057,15 @@ function nstRender(){
   var d=nst.data||{}, c=d.config||{}, msg=document.getElementById('nst-msg');
   var s=(d.strategies||[]).filter(function(x){ return x.id===nst.tab; })[0];
   if(!d.ok||!s){ msg.style.display=''; msg.textContent=d.message||'Not available.'; return; }
-  var mode=s.mode||'paper', book=nst.book||(mode==='live'?'live':'paper');
-  var b=book==='live'?(s.live||{}):s, sm=b.summary||{}, cap=Number(c.capital)||0;
+  var b=s, sm=b.summary||{}, cap=Number(c.capital)||0;
   var eq=sm.equity!=null?Number(sm.equity):cap;
   document.getElementById('nst-topbar').innerHTML='🎯 Nifty Strangle '+s.label+' — Weekly Short Strangle · tracking '+dt(c.start_date)+' → '+dt(c.end_date)+
-    ' &nbsp;|&nbsp; '+(book==='live'?'LIVE book':'PAPER book');
+    ' &nbsp;|&nbsp; PAPER TRADING';
   document.getElementById('nst-cap').textContent='₹'+f(cap,0);
   document.getElementById('nst-lots').textContent=Math.floor(eq/(Number(c.margin_per_lot)||1));
   document.getElementById('nst-margin').textContent='₹'+f(c.margin_per_lot,0);
   document.getElementById('nst-ce').textContent=s.ce_pct+'%';
   document.getElementById('nst-pe').textContent=s.pe_pct+'%';
-  document.getElementById('nst-mode').innerHTML='<span class="nst-mode '+mode+'">'+mode.toUpperCase()+'</span> <a href="/go-live" style="font-size:10px">switch on Go-Live</a>';
-  document.getElementById('nst-book').innerHTML=['paper','live'].map(function(k){
-    return '<button class="'+(k===book?'on':'')+'" onclick="nstBook(\''+k+'\')">'+(k==='paper'?'Paper':'Live')+'</button>'; }).join(' ');
   var n=(sm.wins||0)+(sm.losses||0), ret=cap?(eq-cap)/cap*100:0, skips=b.skips||[];
   document.getElementById('nst-stats').innerHTML=
     '<td class="cell-black">'+(c.lot_size||'')+'</td><td class="cell-black">₹'+f(eq,0)+'</td>'+
@@ -2087,8 +2074,6 @@ function nstRender(){
     '<td class="pos">₹'+f(sm.best||0)+'</td><td class="neg">₹'+f(sm.worst||0)+'</td><td>'+skips.length+'</td>';
   var notes=[];
   if(!d.connected) notes.push('Zerodha not connected — entries and exits need the admin token.');
-  if(book==='live'&&mode!=='live') notes.push('Live book — this strategy is in '+mode.toUpperCase()+' mode, so no live orders are placed. Switch it on the Go-Live page.');
-  if(b.open&&b.open.partial) notes.push('Open live trade has only one leg — the other leg\'s order failed. Check Zerodha.');
   msg.style.display=notes.length?'':'none'; msg.textContent=notes.join(' ');
   var trades=(b.trades||[]).slice().sort(function(x,y){ return x.entry_date<y.entry_date?-1:1; });
   var run=cap, peak=cap, html=trades.map(function(t,i){
@@ -2107,7 +2092,7 @@ function nstRender(){
     html+='<tr style="font-weight:bold"><td>'+(trades.length+1)+'</td><td>'+dt(o.entry_date)+'</td><td>'+f(o.spot,0)+'</td><td>'+dt(o.expiry)+'</td><td class="cell-black">'+f(o.qty,0)+'</td>'+
       '<td class="cell-black">'+(L.ce?L.ce.strike:'')+'</td><td>'+leg(L.ce,'entry_price')+'</td><td>'+(o.marks&&o.marks.ce?f(o.marks.ce)+' (LTP)':'')+'</td>'+
       '<td class="cell-black">'+(L.pe?L.pe.strike:'')+'</td><td>'+leg(L.pe,'entry_price')+'</td><td>'+(o.marks&&o.marks.pe?f(o.marks.pe)+' (LTP)':'')+'</td>'+
-      '<td>OPEN</td><td>'+(o.mode==='live'?'live position':'paper')+'</td><td class="'+sg(op)+'">'+(op!=null?'₹'+f(op)+' (open)':'')+'</td>'+
+      '<td>OPEN</td><td>paper</td><td class="'+sg(op)+'">'+(op!=null?'₹'+f(op)+' (open)':'')+'</td>'+
       '<td colspan="5"></td></tr>';
   }
   document.getElementById('nst-tbody').innerHTML=html||'<tr><td colspan="19" style="padding:10px">No trades yet — the first Thursday entry is after '+dt(c.start_date)+'.</td></tr>';

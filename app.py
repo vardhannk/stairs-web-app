@@ -522,10 +522,10 @@ def create_order_payload(symbol, transaction_type, quantity):
 # via POST /api/automation/live_models. Default = only futures.
 # ============================================================================
 KNOWN_LIVE_MODELS = ("futures", "ob_workstation", "ait_workstation", "nexp_workstation", "nifty_strangle_w",
-                     "vol_cluster", "gc_options_buy", "ar_thu30ve", "ar_thu25ve")
+                     "vol_cluster", "gc_options_buy")
 # Moved from STAIRS: run on the admin's own account only, with their own books
 # (vol_cluster.py / gc_options_buy.py), not strategy_bundle trades.
-ADMIN_BOOK_MODELS = ("vol_cluster", "gc_options_buy", "ar_thu30ve", "ar_thu25ve")
+ADMIN_BOOK_MODELS = ("vol_cluster", "gc_options_buy")
 DEFAULT_LIVE_ENABLED_MODELS = ["futures"]
 
 # Which tier-access module a user needs to CONTROL (switch off/paper/live) each
@@ -539,8 +539,6 @@ MODEL_ACCESS_MODULE = {
     "nifty_strangle_w": "automation",
     "vol_cluster": "admin",
     "gc_options_buy": "admin",
-    "ar_thu30ve": "admin",
-    "ar_thu25ve": "admin",
 }
 
 # Per-model execution mode:
@@ -556,8 +554,6 @@ DEFAULT_MODEL_MODES = {
     "nifty_strangle_w":  "paper",   # new strategy — starts in paper per go-live request
     "vol_cluster":       "paper",
     "gc_options_buy":    "paper",
-    "ar_thu30ve":        "paper",
-    "ar_thu25ve":        "paper",
 }
 
 def _modes_key(user_id=None):
@@ -735,7 +731,7 @@ def _model_from_reason(reason):
     if r.startswith("futures"):
         return "futures"
     for m in ("nifty_strangle_w", "nexp_workstation", "ob_workstation", "ait_workstation",
-              "vol_cluster", "gc_options_buy", "ar_thu30ve", "ar_thu25ve"):
+              "vol_cluster", "gc_options_buy"):
         if m in r:
             return m
     return None
@@ -3077,8 +3073,6 @@ LIVE_MODEL_META = {
     "nifty_strangle_w": {"label": "Nifty Strangle 3.5%",  "strategy": "Short strangle 3.5% OTM · Wed 9:20→15:38", "capital": "₹10,00,000", "risk": "10%"},
     "vol_cluster":      {"label": "VolCluster FUT",       "strategy": "NIFTY futures · VolCluster ST 1H, always in · admin account", "capital": "₹5,00,000", "risk": "1 lot"},
     "gc_options_buy":   {"label": "GC Options Buy",       "strategy": "ATM CE/PE buy · Golden Cross 15m, intraday · admin account", "capital": "₹5,00,000", "risk": "5–15% (VIX)"},
-    "ar_thu30ve":       {"label": "Nifty Strangle Thu 3.0%", "strategy": "Short strangle 3.0% OTM · Thu 9:20→Tue expiry · VIX ≤ 20, no event weeks · admin account", "capital": "₹10,00,000", "risk": "No SL"},
-    "ar_thu25ve":       {"label": "Nifty Strangle Thu 2.5%", "strategy": "Short strangle 2.5% OTM · Thu 9:20→Tue expiry · VIX ≤ 20, no event weeks · admin account", "capital": "₹10,00,000", "risk": "No SL"},
 }
 LIVE_MODEL_LABELS = {k: v["label"] for k, v in LIVE_MODEL_META.items()}
 
@@ -5554,8 +5548,6 @@ def api_ait_workstation():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _admin_book_module(model):
-    if model in autoresearch_lab.STRATEGY_BY_MODEL:
-        return autoresearch_lab.GoLive(model)
     return vol_cluster if model == "vol_cluster" else gc_options_buy
 
 
