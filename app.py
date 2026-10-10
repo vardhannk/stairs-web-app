@@ -1767,7 +1767,8 @@ def calc_futures_trades(trades, cfg):
         # Single exit only — partial exits are no longer used. Use the first exit
         # price (falls back to entry so a still-open trade shows zero P&L).
         ex = t.get("partial_exit1")
-        exit_px = float(ex) if ex not in ("", None) else entry
+        is_open = ex in ("", None)
+        exit_px = entry if is_open else float(ex)
         q = qty
         # Direction sets which leg is the buy and which is the sell (STT is on the
         # sell side, stamp on the buy side). Costs = real Zerodha F&O futures charges.
@@ -1777,7 +1778,8 @@ def calc_futures_trades(trades, cfg):
         else:
             sell_val, buy_val = entry * q, exit_px * q
             gross = (entry - exit_px) * q
-        cost = _zerodha_futures_cost(buy_val, sell_val, cfg)
+        # Round-trip charges are only incurred once the trade has an exit.
+        cost = 0.0 if is_open else _zerodha_futures_cost(buy_val, sell_val, cfg)
         pnl = gross - cost
         running_cap += pnl
         peak = max(running_cap, peak)
@@ -1793,10 +1795,12 @@ def calc_futures_trades(trades, cfg):
             "drawdown": round(dd * 100, 4),
             "trade_return": round(ret * 100, 4),
             "peak": round(peak, 2),
+            "_open": is_open,
         })
 
-    wins = [r for r in results if r["pnl"] >= 0]
-    losses = [r for r in results if r["pnl"] < 0]
+    closed = [r for r in results if not r.pop("_open")]
+    wins = [r for r in closed if r["pnl"] >= 0]
+    losses = [r for r in closed if r["pnl"] < 0]
     curr_dd = results[-1]["drawdown"] if results else 0
     summary = {
         "curr_cap": round(running_cap, 2),
