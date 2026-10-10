@@ -2,6 +2,7 @@ import models_v2
 import kite_feed
 import vol_cluster
 import gc_options_buy
+import strangle_lab
 from flask import Flask, render_template, request, jsonify, redirect, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 import html
@@ -5612,6 +5613,16 @@ def api_gc_options_buy_tick():
     return _admin_book_call(gc_options_buy.daily_tick)
 
 
+@app.route("/api/strangle-lab", methods=["GET"])
+def api_strangle_lab():
+    return _admin_book_call(lambda: {**strangle_lab.panel(), "connected": kite_feed.connected()})
+
+
+@app.route("/api/strangle-lab/config", methods=["POST"])
+def api_strangle_lab_config():
+    return _admin_book_call(lambda: {"ok": True, "config": strangle_lab.set_config(request.get_json(silent=True) or {})})
+
+
 _QUIET_PHASES = {"hold", "idle_auto_off", "model_off", "outside_session", "flat_no_signal",
                  "past_cutoff", "pre_open", "weekend", "flat", "no_entry"}
 
@@ -5620,7 +5631,7 @@ def admin_book_models_job():
     """VolCluster auto-tick every 5 min; GC daily-tick every 60s while a position
     is open (exit management), else every 5 min. IST weekdays 09:00–15:59 only."""
     time.sleep(60)
-    next_vc = next_gc = 0.0
+    next_vc = next_gc = next_sl = 0.0
     while True:
         try:
             now = datetime.now(APP_TZ)
@@ -5639,6 +5650,16 @@ def admin_book_models_job():
                     if res.get("phase") not in _QUIET_PHASES:
                         log_automation(f"GC Options Buy tick: {res.get('phase')} {res.get('message') or ''}".strip(),
                                        level="INFO" if res.get("ok") else "ERROR", details=res)
+                if t >= next_sl:
+                    next_sl = t + 60
+                    try:
+                        res = strangle_lab.tick(now)
+                        if res.get("phase") not in _QUIET_PHASES | {"entered", "exited"}:
+                            log_automation(f"Strangle Lab tick: {res.get('phase')} {res.get('message') or ''}".strip(),
+                                           level="WARNING", details=res)
+                    except Exception as e:
+                        log_automation(f"Strangle Lab tick error: {e}", level="ERROR",
+                                       details={"traceback": traceback.format_exc()})
         except Exception as e:
             log_automation(f"admin_book_models_job error: {e}", level="ERROR",
                            details={"traceback": traceback.format_exc()})

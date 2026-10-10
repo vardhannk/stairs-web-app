@@ -269,6 +269,7 @@
   <button data-module="automation" data-model="nifty_strangle_w" onclick="goto('nifty-strangle-w')"><span class="nav-label">🎯 Nifty Strangle 3.5%</span><span class="nav-badge" id="navbadge-nifty_strangle_w"></span></button>
   <button data-module="admin" data-model="vol_cluster" onclick="goto('vol-cluster')"><span class="nav-label">📈 VolCluster FUT</span><span class="nav-badge" id="navbadge-vol_cluster"></span></button>
   <button data-module="admin" data-model="gc_options_buy" onclick="goto('gc-options-buy')"><span class="nav-label">🎯 GC Options Buy</span><span class="nav-badge" id="navbadge-gc_options_buy"></span></button>
+  <button data-module="admin" onclick="goto('strangle-lab')"><span class="nav-label">🧪 Strangle Lab</span><span class="nav-badge paper">PAPER</span></button>
   <div id="strategy-list"></div>
 </nav>
 
@@ -453,35 +454,35 @@
 <!-- ═══════════════════════════════════════════════════════ FUTURES -->
 <style>
 /* ── Futures + VolCluster pages — artifact "sheet" styling ── */
-:is(#page-futures,#page-vol-cluster){--fbrand:#1f4e79;--fbrandDark:#163a5c;--fcoral:#c0322b;--fink:#000000;--fhead:#d9d9d9;--fblue:#bdd7ee;--fcream:#ffffff}
-:is(#page-futures,#page-vol-cluster) .card{background:var(--fcream);border:1px solid #d0d3d7;box-shadow:0 6px 18px rgba(36,52,71,.06)}
-:is(#page-futures,#page-vol-cluster) .card-title{color:var(--fink)}
-:is(#page-futures,#page-vol-cluster) .note{background:#fff2cc;border:1px solid #e2d089;color:#6b5900}
-:is(#page-futures,#page-vol-cluster) .config-row{gap:10px;flex-wrap:wrap;align-items:flex-end}
-:is(#page-futures,#page-vol-cluster) .config-group{min-width:150px}
-:is(#page-futures,#page-vol-cluster) .config-group label{color:#6e7b8c;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab){--fbrand:#1f4e79;--fbrandDark:#163a5c;--fcoral:#c0322b;--fink:#000000;--fhead:#d9d9d9;--fblue:#bdd7ee;--fcream:#ffffff}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .card{background:var(--fcream);border:1px solid #d0d3d7;box-shadow:0 6px 18px rgba(36,52,71,.06)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .card-title{color:var(--fink)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .note{background:#fff2cc;border:1px solid #e2d089;color:#6b5900}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-row{gap:10px;flex-wrap:wrap;align-items:flex-end}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-group{min-width:150px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-group label{color:#6e7b8c;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 /* light blue = input cells (matches OB/AIT cell-blue) */
-:is(#page-futures,#page-vol-cluster) .config-group input{background:var(--fblue);border:1px solid #999;color:var(--fbrand);font-weight:700;font-size:14px;border-radius:4px;height:40px;width:100%;padding:0 12px}
-:is(#page-futures,#page-vol-cluster) .config-group input:focus{outline:2px solid var(--fbrand);border-color:var(--fbrand)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-group input{background:var(--fblue);border:1px solid #999;color:var(--fbrand);font-weight:700;font-size:14px;border-radius:4px;height:40px;width:100%;padding:0 12px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .config-group input:focus{outline:2px solid var(--fbrand);border-color:var(--fbrand)}
 /* derived Qty / Min Capital cells use the same look as the input cells */
 :is(#f-qty-disp,#f-mincap-disp,#vc-qty-disp,#vc-mincap-disp){background:var(--fblue);border:1px solid #999;color:var(--fbrand);border-radius:4px;height:40px;display:flex;align-items:center;padding:0 12px;font-size:14px;font-weight:700}
 /* stats as sheet cells */
-:is(#page-futures,#page-vol-cluster) .stat{background:var(--fhead);border:1px solid #999;border-radius:4px;box-shadow:none}
-:is(#page-futures,#page-vol-cluster) .stat-label{color:#333;text-transform:uppercase;letter-spacing:.3px;font-size:10px}
-:is(#page-futures,#page-vol-cluster) .stat-value{color:var(--fink);font-size:16px}
-:is(#page-futures,#page-vol-cluster) .stat-value.neu{color:var(--fbrand)}
-:is(#page-futures,#page-vol-cluster) .stat-value.pos{color:#1a7f37}
-:is(#page-futures,#page-vol-cluster) .stat-value.neg{color:var(--fcoral)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat{background:var(--fhead);border:1px solid #999;border-radius:4px;box-shadow:none}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-label{color:#333;text-transform:uppercase;letter-spacing:.3px;font-size:10px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-value{color:var(--fink);font-size:16px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-value.neu{color:var(--fbrand)}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-value.pos{color:#1a7f37}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .stat-value.neg{color:var(--fcoral)}
 /* trade table — same Excel look as OB/AIT */
-:is(#page-futures,#page-vol-cluster) table{border-collapse:collapse;width:100%}
-:is(#page-futures,#page-vol-cluster) table thead th{background:var(--fbrand);color:#fff;font-weight:600;font-size:11px;padding:8px 10px;border:1px solid var(--fbrandDark);white-space:nowrap}
-:is(#page-futures,#page-vol-cluster) table td{border:1px solid #d9d9d9;padding:6px 10px;font-size:12px}
-:is(#page-futures,#page-vol-cluster) table tbody tr:nth-child(even){background:#f2f2f2}
-:is(#page-futures,#page-vol-cluster) .pos{color:#1a7f37!important}
-:is(#page-futures,#page-vol-cluster) .neg{color:#c0322b!important}
-:is(#page-futures,#page-vol-cluster) .peak{color:#7f6000;font-weight:bold}
-:is(#page-futures,#page-vol-cluster) .tag-long{background:rgba(0,97,0,.12);color:#1a7f37}
-:is(#page-futures,#page-vol-cluster) .tag-short{background:rgba(192,50,43,.12);color:#c0322b}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) table{border-collapse:collapse;width:100%}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) table thead th{background:var(--fbrand);color:#fff;font-weight:600;font-size:11px;padding:8px 10px;border:1px solid var(--fbrandDark);white-space:nowrap}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) table td{border:1px solid #d9d9d9;padding:6px 10px;font-size:12px}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) table tbody tr:nth-child(even){background:#f2f2f2}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .pos{color:#1a7f37!important}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .neg{color:#c0322b!important}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .peak{color:#7f6000;font-weight:bold}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .tag-long{background:rgba(0,97,0,.12);color:#1a7f37}
+:is(#page-futures,#page-vol-cluster,#page-strangle-lab) .tag-short{background:rgba(192,50,43,.12);color:#c0322b}
 </style>
 <div id="page-futures" class="page">
   <div class="card">
@@ -2527,6 +2528,46 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
   <div class="card"><div class="card-title">Trade log</div><div class="table-wrap"><table id="gc-trades"></table></div></div>
 </div>
 
+<div id="page-strangle-lab" class="page">
+  <div class="xm-head"><h2>🧪 Strangle Lab</h2><span class="xm-mode paper">paper</span>
+    <span class="muted" style="font-size:12px">Nifty short strangle variants · Wed 09:20 entry → Tue 15:38 exit · paper only, never places orders</span></div>
+  <div class="card">
+    <div class="card-title">Configuration</div>
+    <div class="note" style="margin-bottom:10px">Same rules as Nifty Strangle 3.5% (no SL/target). "This week" sells the nearest weekly expiry and holds it to expiry; "next week" sells the following expiry and buys it back on the same Tuesday. Entries run only between Start and End; open trades still exit after End.</div>
+    <div class="config-row">
+      <div class="config-group"><label>Capital (₹)</label><input type="number" id="sl-cap"/></div>
+      <div class="config-group"><label>Lots per leg</label><input type="number" id="sl-lots" min="1"/></div>
+      <div class="config-group"><label>Lot Size</label><input type="number" id="sl-lot" min="1"/></div>
+      <div class="config-group"><label>Start</label><input type="date" id="sl-start"/></div>
+      <div class="config-group"><label>End</label><input type="date" id="sl-end"/></div>
+      <div class="config-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="saveStrangleLab()">Save</button></div>
+    </div>
+    <div class="xm-msg" id="sl-msg"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Paper tracking — comparison</div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>Variant</th><th>Trades</th><th>Won</th><th>Lost</th><th>Net P&amp;L</th><th>Return</th><th>Avg / trade</th>
+      <th>Best</th><th>Worst</th><th>Max DD</th><th>Avg premium</th><th>Open position</th><th>Open P&amp;L</th>
+    </tr></thead><tbody id="sl-summary"></tbody></table></div>
+  </div>
+  <div class="card" id="sl-bt-card" style="display:none">
+    <div class="card-title">Backtest <span class="muted" id="sl-bt-period" style="font-weight:400"></span></div>
+    <div class="note" id="sl-bt-note" style="margin-bottom:10px"></div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>Variant</th><th>Trades</th><th>Won</th><th>Lost</th><th>Net P&amp;L</th><th>Return</th><th>Avg / trade</th>
+      <th>Best</th><th>Worst</th><th>Max DD</th><th>Avg premium</th>
+    </tr></thead><tbody id="sl-bt"></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Paper trades</div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>#</th><th>Variant</th><th>Entry date</th><th>Spot</th><th>Expiry</th><th>CE strike</th><th>CE entry</th><th>CE exit</th>
+      <th>PE strike</th><th>PE entry</th><th>PE exit</th><th>Qty</th><th>Gross</th><th>Charges</th><th>Net P&amp;L</th><th>Exit</th>
+    </tr></thead><tbody id="sl-trades"></tbody></table></div>
+  </div>
+</div>
+
 <script>
 function xmINR(v){ if(v===null||v===undefined||v==='') return '—'; var n=Number(v); if(!isFinite(n)) return '—'; return (n<0?'-₹':'₹')+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:0}); }
 function xmPct(v){ if(v===null||v===undefined) return '—'; return (Number(v)*100).toFixed(2)+'%'; }
@@ -2626,6 +2667,51 @@ async function loadVolCluster(){
   }
   document.getElementById('vc-tbody').innerHTML=rows.join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No trades in this book yet.</td></tr>';
 }
+function slSummaryCells(s){
+  return '<td>'+(s.trades||0)+'</td><td class="pos">'+(s.wins||0)+'</td><td class="'+(s.losses?'neg':'')+'">'+(s.losses||0)+'</td>'+
+    '<td class="'+cls(toNumber(s.net_pnl))+'">'+inr(s.net_pnl||0)+'</td><td class="'+cls(toNumber(s.return_pct))+'">'+pct(toNumber(s.return_pct))+'</td>'+
+    '<td class="'+cls(toNumber(s.avg_pnl))+'">'+inr(s.avg_pnl||0)+'</td><td class="pos">'+inr(s.best||0)+'</td>'+
+    '<td class="'+cls(toNumber(s.worst))+'">'+inr(s.worst||0)+'</td><td class="'+cls(toNumber(s.max_dd_pct))+'">'+pct(toNumber(s.max_dd_pct))+'</td>'+
+    '<td>'+fmt(toNumber(s.avg_premium))+'</td>';
+}
+async function loadStrangleLab(){
+  var d=await xmFetch('/api/strangle-lab');
+  if(!d.ok){ document.getElementById('sl-msg').textContent=d.message||'Failed to load'; return; }
+  var c=d.config||{};
+  [['sl-cap','capital'],['sl-lots','lots'],['sl-lot','lot_size'],['sl-start','start_date'],['sl-end','end_date']].forEach(function(p){
+    var el=document.getElementById(p[0]); if(document.activeElement!==el) el.value=c[p[1]]; });
+  document.getElementById('sl-msg').textContent=d.connected?'':'Zerodha not connected — entries and exits need the admin token.';
+  document.getElementById('sl-summary').innerHTML=(d.variants||[]).map(function(v){
+    var o=v.open, pos='—', op='';
+    if(o){ pos='CE '+o.legs.ce.strike+' @ '+fmt(o.legs.ce.entry_price)+' · PE '+o.legs.pe.strike+' @ '+fmt(o.legs.pe.entry_price)+' · exp '+fmtDate(o.expiry);
+      if(o.open_pnl!=null) op='<span class="'+cls(toNumber(o.open_pnl))+'">'+inr(o.open_pnl)+'</span>'; }
+    return '<tr><td style="font-weight:bold">'+v.label+'</td>'+slSummaryCells(v.summary||{})+'<td>'+pos+'</td><td>'+op+'</td></tr>';
+  }).join('');
+  var bt=d.backtest;
+  document.getElementById('sl-bt-card').style.display=bt?'':'none';
+  if(bt){
+    document.getElementById('sl-bt-period').textContent='· '+bt.period;
+    document.getElementById('sl-bt-note').textContent=bt.note||'';
+    document.getElementById('sl-bt').innerHTML=(bt.variants||[]).map(function(v){
+      return '<tr><td style="font-weight:bold">'+v.label+'</td>'+slSummaryCells(v.summary||{})+'</tr>'; }).join('');
+  }
+  var rows=[];
+  (d.variants||[]).forEach(function(v){ (v.trades||[]).forEach(function(t){ rows.push([v.label,t]); }); });
+  rows.sort(function(a,b){ return a[1].entry_date<b[1].entry_date?1:a[1].entry_date>b[1].entry_date?-1:0; });
+  document.getElementById('sl-trades').innerHTML=rows.map(function(r,i){
+    var t=r[1], ce=t.legs.ce, pe=t.legs.pe;
+    return '<tr><td>'+(rows.length-i)+'</td><td>'+r[0]+'</td><td>'+fmtDate(t.entry_date)+'</td><td>'+fmt(toNumber(t.spot))+'</td><td>'+fmtDate(t.expiry)+'</td>'+
+      '<td>'+ce.strike+'</td><td>'+fmt(toNumber(ce.entry_price))+'</td><td>'+fmt(toNumber(ce.exit_price))+'</td>'+
+      '<td>'+pe.strike+'</td><td>'+fmt(toNumber(pe.entry_price))+'</td><td>'+fmt(toNumber(pe.exit_price))+'</td><td>'+t.qty+'</td>'+
+      '<td class="'+cls(toNumber(t.gross_pnl))+'">'+inr(t.gross_pnl)+'</td><td>'+inr(t.charges)+'</td>'+
+      '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+fmtDate(t.exit_date)+'</td></tr>';
+  }).join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No closed paper trades yet — first entry Wednesday '+fmtDate(c.start_date)+' 09:20.</td></tr>';
+}
+async function saveStrangleLab(){
+  var v=function(id){ return document.getElementById(id).value; };
+  var d=await xmPost('/api/strangle-lab/config',{capital:v('sl-cap'),lots:v('sl-lots'),lot_size:v('sl-lot'),start_date:v('sl-start'),end_date:v('sl-end')});
+  xmResult('sl-msg',d.ok?{ok:true,action:'save'}:d); loadStrangleLab();
+}
 async function saveVolCluster(){
   var v=function(id){ return Number(document.getElementById(id).value); };
   var d=await xmPost('/api/vol-cluster/config',{capital:v('vc-cap'),nifty_start:v('vc-start'),leverage:v('vc-lev'),lots:v('vc-lots'),lot_size:v('vc-lot')});
@@ -2699,6 +2785,7 @@ function goto(id){
   if(id==='futures') loadFutures();
   if(id==='vol-cluster') loadVolCluster();
   if(id==='gc-options-buy') loadGcob();
+  if(id==='strangle-lab') loadStrangleLab();
   var _nv=document.querySelector('nav'); if(_nv) _nv.classList.remove('open');  // close mobile drawer after navigating
 }
 function openSidebar(){ var n=document.querySelector('nav'); var s=document.getElementById('nav-scrim'); if(n)n.classList.add('open'); if(s)s.classList.add('show'); }
