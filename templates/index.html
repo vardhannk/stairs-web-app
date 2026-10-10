@@ -2586,6 +2586,17 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
     <div class="xm-msg" id="ar-msg"></div>
   </div>
   <div class="card">
+    <div class="card-title">Event calendar <span class="muted" style="font-weight:400">· Budget, election results and other scheduled government news</span></div>
+    <div class="note" style="margin-bottom:10px">Strategies marked "no event weeks" skip any expiry week that contains one of these dates, and close an open trade at 15:20 on the last trading day before the event. Weekend dates (e.g. a Saturday Budget) still count for that week.</div>
+    <div class="config-row" style="margin-bottom:10px">
+      <div class="config-group"><label>Date</label><input type="date" id="ar-ev-date"/></div>
+      <div class="config-group" style="flex:2"><label>Event</label><input type="text" id="ar-ev-name" placeholder="e.g. UP election results"/></div>
+      <div class="config-group" style="justify-content:flex-end"><button class="btn btn-primary" onclick="addArEvent()">Add event</button></div>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th></th></tr></thead><tbody id="ar-events"></tbody></table></div>
+    <div class="xm-msg" id="ar-ev-msg"></div>
+  </div>
+  <div class="card">
     <div class="card-title">Paper tracking</div>
     <div class="table-wrap"><table><thead><tr>
       <th>Strategy</th><th>Equity</th><th>Next lots</th><th>Trades</th><th>Won</th><th>Lost</th><th>Net P&amp;L</th><th>Return</th>
@@ -2600,6 +2611,17 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
       <th>Full CAGR</th><th>Full DD</th><th>Worst week</th><th>DD &lt; 12% everywhere</th>
     </tr></thead><tbody id="ar-research"></tbody></table></div>
   </div>
+  <div class="card" id="ar-long-card" style="display:none">
+    <div class="card-title">Long history, 2019–2026 <span class="muted" id="ar-long-period" style="font-weight:400"></span></div>
+    <div class="note" id="ar-long-note" style="margin-bottom:10px"></div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>Strategy</th><th>CAGR</th><th>Max DD</th><th>Final equity (from ₹10L)</th><th>Trades</th><th>Worst week</th>
+    </tr></thead><tbody id="ar-long"></tbody></table></div>
+    <div class="card-title" style="margin-top:16px">Year by year · <span id="ar-long-ylabel" style="font-weight:400"></span></div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>Year</th><th>Return</th><th>Max DD</th><th>Losing weeks</th><th>Worst week</th>
+    </tr></thead><tbody id="ar-long-years"></tbody></table></div>
+  </div>
   <div class="card" id="ar-log-card" style="display:none">
     <div class="card-title">Experiment log <span class="muted" style="font-weight:400">· search period only, kept = improved the score</span></div>
     <div class="table-wrap"><table><thead id="ar-log-head"><tr>
@@ -2611,10 +2633,10 @@ if(document.getElementById('nsw-tbody')) window.nswSyncFromDB();
     <div class="config-row" style="margin-bottom:10px">
       <div class="config-group"><label>Strategy</label><select id="ar-bt-strat" onchange="renderArTrades()"></select></div>
       <div class="config-group"><label>Period</label><select id="ar-bt-period" onchange="renderArTrades()">
-        <option value="all">Full period</option><option value="search">2024–25 (search)</option><option value="test">2026 (test)</option></select></div>
+        <option value="all">Full period</option><option value="pre">2019 – Jun 2024 (long history only)</option><option value="search">Jul 2024–25 (search)</option><option value="test">2026 (test)</option></select></div>
       <div class="config-group" style="justify-content:flex-end"><span class="muted" id="ar-bt-stats" style="font-size:12px"></span></div>
     </div>
-    <div class="note" style="margin-bottom:10px">Full-period run from ₹10L in Jul 2024, so lots and equity carry through into 2026.</div>
+    <div class="note" style="margin-bottom:10px">Each list is one compounding run from ₹10L at its first trade (Jul 2024, or Feb 2019 for the 2019–26 list), so lots and equity carry through.</div>
     <div class="table-wrap"><table><thead><tr>
       <th>#</th><th>Period</th><th>Entry</th><th>Exit</th><th>Lots</th><th>CE strike</th><th>CE entry</th><th>CE exit</th>
       <th>PE strike</th><th>PE entry</th><th>PE exit</th><th>P&amp;L</th><th>Equity</th>
@@ -2775,10 +2797,11 @@ async function loadAutoresearchLab(){
   [['ar-cap','capital'],['ar-margin','margin_per_lot'],['ar-lot','lot_size'],['ar-start','start_date'],['ar-end','end_date']].forEach(function(p){
     var el=document.getElementById(p[0]); if(document.activeElement!==el) el.value=c[p[1]]; });
   document.getElementById('ar-msg').textContent=d.connected?'':'Zerodha not connected — entries and exits need the admin token.';
+  arEvents=(c.events||[]).slice(); renderArEvents();
   var pc=function(v){ return '<span class="'+cls(toNumber(v))+'">'+pct(toNumber(v)*100)+'</span>'; };
   document.getElementById('ar-summary').innerHTML=(d.strategies||[]).map(function(s){
     var m=s.summary||{}, o=s.open, pos='—', op='', sk=(s.skips||[]).slice(-1)[0];
-    if(!o && sk) pos='<span class="muted">Skipped '+fmtDate(sk.date)+' · VIX '+fmt(sk.vix)+' &gt; '+s.vix_max+'</span>';
+    if(!o && sk) pos='<span class="muted">Skipped '+fmtDate(sk.date)+' · '+(sk.reason==='event'?(sk.event+' ('+fmtDate(sk.event_date)+')'):('VIX '+fmt(sk.vix)+' &gt; '+s.vix_max))+'</span>';
     if(o){ pos=o.lots+' lots · CE '+o.legs.ce.strike+' @ '+fmt(o.legs.ce.entry_price)+' · PE '+o.legs.pe.strike+' @ '+fmt(o.legs.pe.entry_price)+' · exp '+fmtDate(o.expiry);
       if(o.open_pnl!=null) op='<span class="'+cls(toNumber(o.open_pnl))+'">'+inr(o.open_pnl)+'</span>'; }
     var lots=Math.floor(toNumber(m.equity)/(toNumber(c.margin_per_lot)||1));
@@ -2800,9 +2823,21 @@ async function loadAutoresearchLab(){
         '<td class="'+(s.passes?'pos':'neg')+'" style="font-weight:bold">'+(s.passes?'Yes':'No')+'</td></tr>'; }).join('');
     arLogRows=(r.experiments||[]).map(function(e,i){ return Object.assign({n:i+1},e); });
     renderArLog();
+    var L=r.long;
+    document.getElementById('ar-long-card').style.display=L?'':'none';
+    if(L){
+      document.getElementById('ar-long-period').textContent='· '+(L.period||'');
+      document.getElementById('ar-long-note').textContent=L.note||'';
+      document.getElementById('ar-long').innerHTML=(L.strategies||[]).map(function(s){
+        return '<tr><td style="font-weight:bold">'+s.label+'</td><td>'+pc(s.cagr)+'</td><td>'+pc(s.max_dd)+'</td><td>'+inr(s.final_equity)+'</td>'+
+          '<td>'+s.trades+'</td><td>'+pc(s.worst_week_pct)+' of equity</td></tr>'; }).join('');
+      document.getElementById('ar-long-ylabel').textContent=L.yearly_label||'';
+      document.getElementById('ar-long-years').innerHTML=(L.yearly||[]).map(function(y){
+        return '<tr><td>'+y.year+'</td><td>'+pc(y.ret)+'</td><td>'+pc(y.dd)+'</td><td>'+y.losing+' / '+y.n+'</td><td>'+pc(y.worst)+'</td></tr>'; }).join('');
+    }
     arResearch=r;
     var sel=document.getElementById('ar-bt-strat'), keep=sel.value;
-    sel.innerHTML=(r.strategies||[]).map(function(s){ return '<option value="'+s.id+'">'+s.label+'</option>'; }).join('');
+    sel.innerHTML=(r.strategies||[]).concat(L&&L.trades?[L.trades]:[]).map(function(s){ return '<option value="'+s.id+'">'+s.label+'</option>'; }).join('');
     if(keep) sel.value=keep;
     renderArTrades();
   }
@@ -2818,18 +2853,39 @@ async function loadAutoresearchLab(){
       '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+fmtDate(t.exit_date)+'</td></tr>';
   }).join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No closed paper trades yet — tracking starts '+fmtDate(c.start_date)+'.</td></tr>';
 }
+var arEvents=[];
+function renderArEvents(){
+  document.getElementById('ar-events').innerHTML=arEvents.map(function(e,i){
+    return '<tr><td>'+fmtDate(e.date)+'</td><td>'+e.name.replace(/</g,'&lt;')+'</td>'+
+      '<td style="text-align:right"><button class="btn" style="background:#c00;color:#fff;padding:3px 10px" onclick="removeArEvent('+i+')">Remove</button></td></tr>';
+  }).join('')||'<tr><td colspan="3" class="muted" style="text-align:center;padding:12px">No events.</td></tr>';
+}
+async function saveArEvents(){
+  var d=await xmPost('/api/autoresearch-lab/config',{events:arEvents});
+  xmResult('ar-ev-msg',d.ok?{ok:true,action:'save'}:d);
+  if(d.ok&&d.config){ arEvents=d.config.events||[]; renderArEvents(); }
+}
+function addArEvent(){
+  var dt=document.getElementById('ar-ev-date').value, nm=document.getElementById('ar-ev-name').value.trim();
+  if(!dt){ document.getElementById('ar-ev-msg').textContent='Pick a date.'; return; }
+  arEvents.push({date:dt,name:nm||'Event'});
+  document.getElementById('ar-ev-name').value='';
+  saveArEvents();
+}
+function removeArEvent(i){ arEvents.splice(i,1); saveArEvents(); }
 var arResearch=null;
 function renderArTrades(){
   if(!arResearch) return;
   var id=document.getElementById('ar-bt-strat').value, per=document.getElementById('ar-bt-period').value;
-  var s=(arResearch.strategies||[]).filter(function(x){ return x.id===id; })[0]||{};
+  var all=(arResearch.strategies||[]).concat(arResearch.long&&arResearch.long.trades?[arResearch.long.trades]:[]);
+  var s=all.filter(function(x){ return x.id===id; })[0]||{};
   var rows=(s.trades||[]).filter(function(t){ return per==='all'||t.period===per; });
   var net=rows.reduce(function(a,t){ return a+toNumber(t.pnl); },0), won=rows.filter(function(t){ return t.pnl>0; }).length;
   var worst=rows.reduce(function(a,t){ return Math.min(a,toNumber(t.pnl)); },0);
   document.getElementById('ar-bt-stats').innerHTML=rows.length+' trades · won '+won+' · lost '+(rows.length-won)+
     ' · net <span class="'+cls(net)+'">'+inr(net)+'</span> · worst <span class="'+cls(worst)+'">'+inr(worst)+'</span>';
   document.getElementById('ar-test').innerHTML=rows.map(function(t,i){
-    return '<tr><td>'+(i+1)+'</td><td>'+(t.period==='test'?'2026 test':'search')+'</td><td>'+fmtDate(t.entry)+'</td><td>'+fmtDate(t.exit)+'</td><td>'+t.lots+'</td>'+
+    return '<tr><td>'+(i+1)+'</td><td>'+({test:'2026 test',search:'search',pre:'2019–24'}[t.period]||t.period)+'</td><td>'+fmtDate(t.entry)+'</td><td>'+fmtDate(t.exit)+'</td><td>'+t.lots+'</td>'+
       '<td>'+t.ce_strike+'</td><td>'+fmt(t.ce_entry)+'</td><td>'+fmt(t.ce_exit)+'</td><td>'+t.pe_strike+'</td><td>'+fmt(t.pe_entry)+'</td><td>'+fmt(t.pe_exit)+'</td>'+
       '<td class="'+cls(toNumber(t.pnl))+'">'+inr(t.pnl)+'</td><td>'+inr(t.equity)+'</td></tr>'; }).join('');
 }
