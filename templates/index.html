@@ -452,36 +452,36 @@
 
 <!-- ═══════════════════════════════════════════════════════ FUTURES -->
 <style>
-/* ── Futures page — artifact "sheet" styling (scoped to #page-futures only) ── */
-#page-futures{--fbrand:#1f4e79;--fbrandDark:#163a5c;--fcoral:#c0322b;--fink:#000000;--fhead:#d9d9d9;--fblue:#bdd7ee;--fcream:#ffffff}
-#page-futures .card{background:var(--fcream);border:1px solid #d0d3d7;box-shadow:0 6px 18px rgba(36,52,71,.06)}
-#page-futures .card-title{color:var(--fink)}
-#page-futures .note{background:#fff2cc;border:1px solid #e2d089;color:#6b5900}
-#page-futures .config-row{gap:10px;flex-wrap:wrap;align-items:flex-end}
-#page-futures .config-group{min-width:150px}
-#page-futures .config-group label{color:#6e7b8c;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+/* ── Futures + VolCluster pages — artifact "sheet" styling ── */
+:is(#page-futures,#page-vol-cluster){--fbrand:#1f4e79;--fbrandDark:#163a5c;--fcoral:#c0322b;--fink:#000000;--fhead:#d9d9d9;--fblue:#bdd7ee;--fcream:#ffffff}
+:is(#page-futures,#page-vol-cluster) .card{background:var(--fcream);border:1px solid #d0d3d7;box-shadow:0 6px 18px rgba(36,52,71,.06)}
+:is(#page-futures,#page-vol-cluster) .card-title{color:var(--fink)}
+:is(#page-futures,#page-vol-cluster) .note{background:#fff2cc;border:1px solid #e2d089;color:#6b5900}
+:is(#page-futures,#page-vol-cluster) .config-row{gap:10px;flex-wrap:wrap;align-items:flex-end}
+:is(#page-futures,#page-vol-cluster) .config-group{min-width:150px}
+:is(#page-futures,#page-vol-cluster) .config-group label{color:#6e7b8c;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 /* light blue = input cells (matches OB/AIT cell-blue) */
-#page-futures .config-group input{background:var(--fblue);border:1px solid #999;color:var(--fbrand);font-weight:700;font-size:14px;border-radius:4px;height:40px;width:100%;padding:0 12px}
-#page-futures .config-group input:focus{outline:2px solid var(--fbrand);border-color:var(--fbrand)}
+:is(#page-futures,#page-vol-cluster) .config-group input{background:var(--fblue);border:1px solid #999;color:var(--fbrand);font-weight:700;font-size:14px;border-radius:4px;height:40px;width:100%;padding:0 12px}
+:is(#page-futures,#page-vol-cluster) .config-group input:focus{outline:2px solid var(--fbrand);border-color:var(--fbrand)}
 /* black = derived / locked cells (matches OB/AIT cell-black) */
-#page-futures #f-qty-disp,#page-futures #f-mincap-disp{background:var(--fink);color:#fff;border-radius:4px;height:40px;display:flex;align-items:center;padding:0 12px;font-size:14px;font-weight:700}
+:is(#f-qty-disp,#f-mincap-disp,#vc-qty-disp,#vc-mincap-disp){background:var(--fink);color:#fff;border-radius:4px;height:40px;display:flex;align-items:center;padding:0 12px;font-size:14px;font-weight:700}
 /* stats as sheet cells */
-#page-futures .stat{background:var(--fhead);border:1px solid #999;border-radius:4px;box-shadow:none}
-#page-futures .stat-label{color:#333;text-transform:uppercase;letter-spacing:.3px;font-size:10px}
-#page-futures .stat-value{color:var(--fink);font-size:16px}
-#page-futures .stat-value.neu{color:var(--fbrand)}
-#page-futures .stat-value.pos{color:#1a7f37}
-#page-futures .stat-value.neg{color:var(--fcoral)}
+:is(#page-futures,#page-vol-cluster) .stat{background:var(--fhead);border:1px solid #999;border-radius:4px;box-shadow:none}
+:is(#page-futures,#page-vol-cluster) .stat-label{color:#333;text-transform:uppercase;letter-spacing:.3px;font-size:10px}
+:is(#page-futures,#page-vol-cluster) .stat-value{color:var(--fink);font-size:16px}
+:is(#page-futures,#page-vol-cluster) .stat-value.neu{color:var(--fbrand)}
+:is(#page-futures,#page-vol-cluster) .stat-value.pos{color:#1a7f37}
+:is(#page-futures,#page-vol-cluster) .stat-value.neg{color:var(--fcoral)}
 /* trade table — same Excel look as OB/AIT */
-#page-futures table{border-collapse:collapse;width:100%}
-#page-futures table thead th{background:var(--fbrand);color:#fff;font-weight:600;font-size:11px;padding:8px 10px;border:1px solid var(--fbrandDark);white-space:nowrap}
-#page-futures table td{border:1px solid #d9d9d9;padding:6px 10px;font-size:12px}
-#page-futures table tbody tr:nth-child(even){background:#f2f2f2}
-#page-futures .pos{color:#1a7f37!important}
-#page-futures .neg{color:#c0322b!important}
-#page-futures .peak{color:#7f6000;font-weight:bold}
-#page-futures .tag-long{background:rgba(0,97,0,.12);color:#1a7f37}
-#page-futures .tag-short{background:rgba(192,50,43,.12);color:#c0322b}
+:is(#page-futures,#page-vol-cluster) table{border-collapse:collapse;width:100%}
+:is(#page-futures,#page-vol-cluster) table thead th{background:var(--fbrand);color:#fff;font-weight:600;font-size:11px;padding:8px 10px;border:1px solid var(--fbrandDark);white-space:nowrap}
+:is(#page-futures,#page-vol-cluster) table td{border:1px solid #d9d9d9;padding:6px 10px;font-size:12px}
+:is(#page-futures,#page-vol-cluster) table tbody tr:nth-child(even){background:#f2f2f2}
+:is(#page-futures,#page-vol-cluster) .pos{color:#1a7f37!important}
+:is(#page-futures,#page-vol-cluster) .neg{color:#c0322b!important}
+:is(#page-futures,#page-vol-cluster) .peak{color:#7f6000;font-weight:bold}
+:is(#page-futures,#page-vol-cluster) .tag-long{background:rgba(0,97,0,.12);color:#1a7f37}
+:is(#page-futures,#page-vol-cluster) .tag-short{background:rgba(192,50,43,.12);color:#c0322b}
 </style>
 <div id="page-futures" class="page">
   <div class="card">
@@ -2652,12 +2652,12 @@ async function loadVolCluster(){
   });
   if(p){
     var op=toNumber(sm.open_pnl);
-    rows.push('<tr style="background:#fffbe6"><td>'+(trades.length+1)+'</td><td>'+fmtDate(p.entry_date)+'</td>'+
+    rows.push('<tr><td>'+(trades.length+1)+'</td><td>'+fmtDate(p.entry_date)+'</td>'+
       '<td class="'+(p.side==='LONG'?'pos':'neg')+'" style="font-weight:bold">'+p.side+'</td>'+
       '<td>'+fmt(toNumber(p.entry))+'</td><td>'+(futContract(p.contract)||p.contract||'')+'</td>'+
       '<td>'+(p.side==='LONG'?'BUY':'SELL')+'</td><td>'+fmt(toNumber(p.qty))+'</td>'+
-      '<td class="muted">Open · '+(d.mark?fmt(toNumber(d.mark)):'—')+'</td><td></td>'+
-      '<td class="'+cls(op)+'">'+inr(op)+'</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>');
+      '<td></td><td></td>'+
+      '<td class="'+cls(op)+'" title="Open P&L at '+(d.mark?fmt(toNumber(d.mark)):'—')+'">'+inr(op)+'</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>');
   }
   document.getElementById('vc-tbody').innerHTML=rows.join('')||'<tr><td colspan="16" class="muted" style="text-align:center;padding:14px">No trades in this book yet.</td></tr>';
 }
